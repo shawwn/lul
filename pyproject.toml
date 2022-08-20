@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lul"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lisp variants"
 authors = ["Shawn Presser <shawnpresser@gmail.com>"]
 license = "MIT"
