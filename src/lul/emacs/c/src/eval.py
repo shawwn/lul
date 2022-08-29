@@ -1,4 +1,4 @@
-from .runtime import *
+# from .runtime import *
 # from .lisp import *
 
 # /* Evaluator for GNU Emacs Lisp interpreter.
@@ -26,14 +26,19 @@ from .runtime import *
 # #include <limits.h>
 # #include <stdlib.h>
 # #include "lisp.h"
+from .lisp import *
 # #include "blockinput.h"
 # #include "commands.h"
 # #include "keyboard.h"
+from .keyboard import *
 # #include "dispextern.h"
 # #include "buffer.h"
+from .buffer import *
 # #include "pdumper.h"
 # #include "atimer.h"
 #
+from .data import *
+
 # /* CACHEABLE is ordinarily nothing, except it is 'volatile' if
 #    necessary to cajole GCC into not warning incorrectly that a
 #    variable should be volatile.  */
@@ -373,111 +378,125 @@ def init_eval_once():
 # }
 # 
 #
-# DEFUN ("or", For, Sor, 0, UNEVALLED, 0,
-#        doc: /* Eval args until one of them yields non-nil, then return that value.
-# The remaining args are not evalled at all.
-# If all args return nil, return nil.
-# usage: (or CONDITIONS...)  */)
-#   (Lisp_Object args)
-# {
-#   Lisp_Object val = Qnil;
-#
-#   while (CONSP (args))
-#     {
-#       Lisp_Object arg = XCAR (args);
-#       args = XCDR (args);
-#       val = eval_sub (arg);
-#       if (!NILP (val))
-#         break;
-#     }
-#
-#   return val;
-# }
-#
-# DEFUN ("and", Fand, Sand, 0, UNEVALLED, 0,
-#        doc: /* Eval args until one of them yields nil, then return nil.
-# The remaining args are not evalled at all.
-# If no arg yields nil, return the last arg's value.
-# usage: (and CONDITIONS...)  */)
-#   (Lisp_Object args)
-# {
-#   Lisp_Object val = Qt;
-#
-#   while (CONSP (args))
-#     {
-#       Lisp_Object arg = XCAR (args);
-#       args = XCDR (args);
-#       val = eval_sub (arg);
-#       if (NILP (val))
-#         break;
-#     }
-#
-#   return val;
-# }
-#
-# DEFUN ("if", Fif, Sif, 2, UNEVALLED, 0,
-#        doc: /* If COND yields non-nil, do THEN, else do ELSE...
-# Returns the value of THEN or the value of the last of the ELSE's.
-# THEN must be one expression, but ELSE... can be zero or more expressions.
-# If COND yields nil, and there are no ELSE's, the value is nil.
-# usage: (if COND THEN ELSE...)  */)
-#   (Lisp_Object args)
-# {
-#   Lisp_Object cond;
-#
-#   cond = eval_sub (XCAR (args));
-#
-#   if (!NILP (cond))
-#     return eval_sub (Fcar (XCDR (args)));
-#   return Fprogn (Fcdr (XCDR (args)));
-# }
-#
-# DEFUN ("cond", Fcond, Scond, 0, UNEVALLED, 0,
-#        doc: /* Try each clause until one succeeds.
-# Each clause looks like (CONDITION BODY...).  CONDITION is evaluated
-# and, if the value is non-nil, this clause succeeds:
-# then the expressions in BODY are evaluated and the last one's
-# value is the value of the cond-form.
-# If a clause has one element, as in (CONDITION), then the cond-form
-# returns CONDITION's value, if that is non-nil.
-# If no clause succeeds, cond returns nil.
-# usage: (cond CLAUSES...)  */)
-#   (Lisp_Object args)
-# {
-#   Lisp_Object val = args;
-#
-#   while (CONSP (args))
-#     {
-#       Lisp_Object clause = XCAR (args);
-#       val = eval_sub (Fcar (clause));
-#       if (!NILP (val))
-#         {
-#           if (!NILP (XCDR (clause)))
-#             val = Fprogn (XCDR (clause));
-#           break;
-#         }
-#       args = XCDR (args);
-#     }
-#
-#   return val;
-# }
-#
-# DEFUN ("progn", Fprogn, Sprogn, 0, UNEVALLED, 0,
-#        doc: /* Eval BODY forms sequentially and return value of last one.
-# usage: (progn BODY...)  */)
-#   (Lisp_Object body)
-# {
-#   Lisp_Object CACHEABLE val = Qnil;
-#
-#   while (CONSP (body))
-#     {
-#       Lisp_Object form = XCAR (body);
-#       body = XCDR (body);
-#       val = eval_sub (form);
-#     }
-#
-#   return val;
-# }
+@mixin(F)
+class F:
+    pass
+    # DEFUN ("or", For, Sor, 0, UNEVALLED, 0,
+    #        doc: /* Eval args until one of them yields non-nil, then return that value.
+    # The remaining args are not evalled at all.
+    # If all args return nil, return nil.
+    # usage: (or CONDITIONS...)  */)
+    #   (Lisp_Object args)
+    # {
+    @DEFUN("or", S.or_, 0, UNEVALLED, 0)
+    @staticmethod
+    def or_(args: Lisp_Object):
+        # Lisp_Object val = Qnil;
+        val = Q.nil
+        #
+        # while (CONSP (args))
+        #   {
+        while CONSP(args):
+            # Lisp_Object arg = XCAR (args);
+            arg = XCAR(args)
+            # args = XCDR (args);
+            args = XCDR(args)
+            # val = eval_sub (arg);
+            val = eval_sub(arg)
+            # if (!NILP (val))
+            #   break;
+            if not NILP(val):
+                break
+        #   }
+        #
+        # return val;
+        return val
+    # }
+    #
+    # DEFUN ("and", Fand, Sand, 0, UNEVALLED, 0,
+    #        doc: /* Eval args until one of them yields nil, then return nil.
+    # The remaining args are not evalled at all.
+    # If no arg yields nil, return the last arg's value.
+    # usage: (and CONDITIONS...)  */)
+    #   (Lisp_Object args)
+    # {
+    #   Lisp_Object val = Qt;
+    #
+    #   while (CONSP (args))
+    #     {
+    #       Lisp_Object arg = XCAR (args);
+    #       args = XCDR (args);
+    #       val = eval_sub (arg);
+    #       if (NILP (val))
+    #         break;
+    #     }
+    #
+    #   return val;
+    # }
+    #
+    # DEFUN ("if", Fif, Sif, 2, UNEVALLED, 0,
+    #        doc: /* If COND yields non-nil, do THEN, else do ELSE...
+    # Returns the value of THEN or the value of the last of the ELSE's.
+    # THEN must be one expression, but ELSE... can be zero or more expressions.
+    # If COND yields nil, and there are no ELSE's, the value is nil.
+    # usage: (if COND THEN ELSE...)  */)
+    #   (Lisp_Object args)
+    # {
+    #   Lisp_Object cond;
+    #
+    #   cond = eval_sub (XCAR (args));
+    #
+    #   if (!NILP (cond))
+    #     return eval_sub (Fcar (XCDR (args)));
+    #   return Fprogn (Fcdr (XCDR (args)));
+    # }
+    #
+    # DEFUN ("cond", Fcond, Scond, 0, UNEVALLED, 0,
+    #        doc: /* Try each clause until one succeeds.
+    # Each clause looks like (CONDITION BODY...).  CONDITION is evaluated
+    # and, if the value is non-nil, this clause succeeds:
+    # then the expressions in BODY are evaluated and the last one's
+    # value is the value of the cond-form.
+    # If a clause has one element, as in (CONDITION), then the cond-form
+    # returns CONDITION's value, if that is non-nil.
+    # If no clause succeeds, cond returns nil.
+    # usage: (cond CLAUSES...)  */)
+    #   (Lisp_Object args)
+    # {
+    #   Lisp_Object val = args;
+    #
+    #   while (CONSP (args))
+    #     {
+    #       Lisp_Object clause = XCAR (args);
+    #       val = eval_sub (Fcar (clause));
+    #       if (!NILP (val))
+    #         {
+    #           if (!NILP (XCDR (clause)))
+    #             val = Fprogn (XCDR (clause));
+    #           break;
+    #         }
+    #       args = XCDR (args);
+    #     }
+    #
+    #   return val;
+    # }
+    #
+    # DEFUN ("progn", Fprogn, Sprogn, 0, UNEVALLED, 0,
+    #        doc: /* Eval BODY forms sequentially and return value of last one.
+    # usage: (progn BODY...)  */)
+    #   (Lisp_Object body)
+    # {
+    #   Lisp_Object CACHEABLE val = Qnil;
+    #
+    #   while (CONSP (body))
+    #     {
+    #       Lisp_Object form = XCAR (body);
+    #       body = XCDR (body);
+    #       val = eval_sub (form);
+    #     }
+    #
+    #   return val;
+    # }
 #
 # /* Evaluate BODY sequentially, discarding its value.  */
 #
@@ -2033,6 +2052,11 @@ def xsignal3(error_symbol: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, ar
 #
 #   xsignal (Qerror, Fcons (build_string (s), arg));
 # }
+def signal_error(s: str, arg: Lisp_Object):
+    if NILP(F.proper_list_p(arg)):
+        arg = list1(arg)
+
+    return xsignal(Q.error, F.cons(build_string(s), arg))
 #
 # /* Use this for arithmetic overflow, e.g., when an integer result is
 #    too large even for a bignum.  */
@@ -2501,205 +2525,274 @@ def error(m: str, *ap):
 # Lisp_Object
 # eval_sub (Lisp_Object form)
 # {
-#   if (SYMBOLP (form))
-#     {
-#       /* Look up its binding in the lexical environment.
-#          We do not pay attention to the declared_special flag here, since we
-#          already did that when let-binding the variable.  */
-#       Lisp_Object lex_binding
-#         = (!NILP (Vinternal_interpreter_environment) /* Mere optimization!  */
-#            ? Fassq (form, Vinternal_interpreter_environment)
-#            : Qnil);
-#       return !NILP (lex_binding) ? XCDR (lex_binding) : Fsymbol_value (form);
-#     }
-#
-#   if (!CONSP (form))
-#     return form;
-#
-#   maybe_quit ();
-#
-#   maybe_gc ();
-#
-#   if (++lisp_eval_depth > max_lisp_eval_depth)
-#     {
-#       if (max_lisp_eval_depth < 100)
-#         max_lisp_eval_depth = 100;
-#       if (lisp_eval_depth > max_lisp_eval_depth)
-#         error ("Lisp nesting exceeds `max-lisp-eval-depth'");
-#     }
-#
-#   Lisp_Object original_fun = XCAR (form);
-#   Lisp_Object original_args = XCDR (form);
-#   CHECK_LIST (original_args);
-#
-#   /* This also protects them from gc.  */
-#   ptrdiff_t count
-#     = record_in_backtrace (original_fun, &original_args, UNEVALLED);
-#
-#   if (debug_on_next_call)
-#     do_debug_on_call (Qt, count);
-#
-#   Lisp_Object fun, val, funcar;
-#   /* Declare here, as this array may be accessed by call_debugger near
-#      the end of this function.  See Bug#21245.  */
-#   Lisp_Object argvals[8];
-#
-#  retry:
-#
-#   /* Optimize for no indirection.  */
-#   fun = original_fun;
-#   if (!SYMBOLP (fun))
-#     fun = Ffunction (list1 (fun));
-#   else if (!NILP (fun) && (fun = XSYMBOL (fun)->u.s.function, SYMBOLP (fun)))
-#     fun = indirect_function (fun);
-#
-#   if (SUBRP (fun) && !SUBR_NATIVE_COMPILED_DYNP (fun))
-#     {
-#       Lisp_Object args_left = original_args;
-#       ptrdiff_t numargs = list_length (args_left);
-#
-#       if (numargs < XSUBR (fun)->min_args
-#           || (XSUBR (fun)->max_args >= 0
-#               && XSUBR (fun)->max_args < numargs))
-#         xsignal2 (Qwrong_number_of_arguments, original_fun,
-#                   make_fixnum (numargs));
-#
-#       else if (XSUBR (fun)->max_args == UNEVALLED)
-#         val = (XSUBR (fun)->function.aUNEVALLED) (args_left);
-#       else if (XSUBR (fun)->max_args == MANY)
-#         {
-#           /* Pass a vector of evaluated arguments.  */
-#           Lisp_Object *vals;
-#           ptrdiff_t argnum = 0;
-#           USE_SAFE_ALLOCA;
-#
-#           SAFE_ALLOCA_LISP (vals, numargs);
-#
-#           while (CONSP (args_left) && argnum < numargs)
-#             {
-#               Lisp_Object arg = XCAR (args_left);
-#               args_left = XCDR (args_left);
-#               vals[argnum++] = eval_sub (arg);
-#             }
-#
-#           set_backtrace_args (specpdl + count, vals, argnum);
-#
-#           val = XSUBR (fun)->function.aMANY (argnum, vals);
-#
-#           lisp_eval_depth--;
-#           /* Do the debug-on-exit now, while VALS still exists.  */
-#           if (backtrace_debug_on_exit (specpdl + count))
-#             val = call_debugger (list2 (Qexit, val));
-#           SAFE_FREE ();
-#           specpdl_ptr--;
-#           return val;
-#         }
-#       else
-#         {
-#           int i, maxargs = XSUBR (fun)->max_args;
-#
-#           for (i = 0; i < maxargs; i++)
-#             {
-#               argvals[i] = eval_sub (Fcar (args_left));
-#               args_left = Fcdr (args_left);
-#             }
-#
-#           set_backtrace_args (specpdl + count, argvals, numargs);
-#
-#           switch (i)
-#             {
-#             case 0:
-#               val = (XSUBR (fun)->function.a0 ());
-#               break;
-#             case 1:
-#               val = (XSUBR (fun)->function.a1 (argvals[0]));
-#               break;
-#             case 2:
-#               val = (XSUBR (fun)->function.a2 (argvals[0], argvals[1]));
-#               break;
-#             case 3:
-#               val = (XSUBR (fun)->function.a3
-#                      (argvals[0], argvals[1], argvals[2]));
-#               break;
-#             case 4:
-#               val = (XSUBR (fun)->function.a4
-#                      (argvals[0], argvals[1], argvals[2], argvals[3]));
-#               break;
-#             case 5:
-#               val = (XSUBR (fun)->function.a5
-#                      (argvals[0], argvals[1], argvals[2], argvals[3],
-#                       argvals[4]));
-#               break;
-#             case 6:
-#               val = (XSUBR (fun)->function.a6
-#                      (argvals[0], argvals[1], argvals[2], argvals[3],
-#                       argvals[4], argvals[5]));
-#               break;
-#             case 7:
-#               val = (XSUBR (fun)->function.a7
-#                      (argvals[0], argvals[1], argvals[2], argvals[3],
-#                       argvals[4], argvals[5], argvals[6]));
-#               break;
-#
-#             case 8:
-#               val = (XSUBR (fun)->function.a8
-#                      (argvals[0], argvals[1], argvals[2], argvals[3],
-#                       argvals[4], argvals[5], argvals[6], argvals[7]));
-#               break;
-#
-#             default:
-#               /* Someone has created a subr that takes more arguments than
-#                  is supported by this code.  We need to either rewrite the
-#                  subr to use a different argument protocol, or add more
-#                  cases to this switch.  */
-#               emacs_abort ();
-#             }
-#         }
-#     }
-#   else if (COMPILEDP (fun)
-#            || SUBR_NATIVE_COMPILED_DYNP (fun)
-#            || MODULE_FUNCTIONP (fun))
-#     return apply_lambda (fun, original_args, count);
-#   else
-#     {
-#       if (NILP (fun))
-#         xsignal1 (Qvoid_function, original_fun);
-#       if (!CONSP (fun))
-#         xsignal1 (Qinvalid_function, original_fun);
-#       funcar = XCAR (fun);
-#       if (!SYMBOLP (funcar))
-#         xsignal1 (Qinvalid_function, original_fun);
-#       if (EQ (funcar, Qautoload))
-#         {
-#           Fautoload_do_load (fun, original_fun, Qnil);
-#           goto retry;
-#         }
-#       if (EQ (funcar, Qmacro))
-#         {
-#           ptrdiff_t count1 = SPECPDL_INDEX ();
-#           Lisp_Object exp;
-#           /* Bind lexical-binding during expansion of the macro, so the
-#              macro can know reliably if the code it outputs will be
-#              interpreted using lexical-binding or not.  */
-#           specbind (Qlexical_binding,
-#                     NILP (Vinternal_interpreter_environment) ? Qnil : Qt);
-#           exp = apply1 (Fcdr (fun), original_args);
-#           exp = unbind_to (count1, exp);
-#           val = eval_sub (exp);
-#         }
-#       else if (EQ (funcar, Qlambda)
-#                || EQ (funcar, Qclosure))
-#         return apply_lambda (fun, original_args, count);
-#       else
-#         xsignal1 (Qinvalid_function, original_fun);
-#     }
-#
-#   lisp_eval_depth--;
-#   if (backtrace_debug_on_exit (specpdl + count))
-#     val = call_debugger (list2 (Qexit, val));
-#   specpdl_ptr--;
-#
-#   return val;
+def eval_sub(form: Lisp_Object):
+    #   if (SYMBOLP (form))
+    #     {
+    if SYMBOLP(form):
+        # /* Look up its binding in the lexical environment.
+        #    We do not pay attention to the declared_special flag here, since we
+        #    already did that when let-binding the variable.  */
+        # Lisp_Object lex_binding
+        #   = (!NILP (Vinternal_interpreter_environment) /* Mere optimization!  */
+        #      ? Fassq (form, Vinternal_interpreter_environment)
+        #      : Qnil);
+        lex_binding = (F.assq(form, V.internal_interpreter_environment)
+                       if not NILP(V.internal_interpreter_environment) else
+                       Q.nil)
+        # return !NILP (lex_binding) ? XCDR (lex_binding) : Fsymbol_value (form);
+        return XCDR(lex_binding) if not NILP(lex_binding) else F.symbol_value(form)
+    #     }
+    #
+    #   if (!CONSP (form))
+    #     return form;
+    if not CONSP(form):
+        return form
+    #
+    #   maybe_quit ();
+    maybe_quit()
+    #
+    #   maybe_gc ();
+    #
+    #   if (++lisp_eval_depth > max_lisp_eval_depth)
+    #     {
+    #       if (max_lisp_eval_depth < 100)
+    #         max_lisp_eval_depth = 100;
+    #       if (lisp_eval_depth > max_lisp_eval_depth)
+    #         error ("Lisp nesting exceeds `max-lisp-eval-depth'");
+    #     }
+    #
+    #   Lisp_Object original_fun = XCAR (form);
+    original_fun = XCAR(form)
+    #   Lisp_Object original_args = XCDR (form);
+    original_args = XCDR(form)
+    #   CHECK_LIST (original_args);
+    CHECK_LIST(original_args)
+    #
+    #   /* This also protects them from gc.  */
+    #   ptrdiff_t count
+    #     = record_in_backtrace (original_fun, &original_args, UNEVALLED);
+    count = 0
+    #
+    #   if (debug_on_next_call)
+    #     do_debug_on_call (Qt, count);
+    #
+    #   Lisp_Object fun, val, funcar;
+    #   /* Declare here, as this array may be accessed by call_debugger near
+    #      the end of this function.  See Bug#21245.  */
+    #   Lisp_Object argvals[8];
+    argvals = []
+    #
+    #  retry:
+    while True:
+        #
+        # /* Optimize for no indirection.  */
+        # fun = original_fun;
+        fun = original_fun
+        # if (!SYMBOLP (fun))
+        #   fun = Ffunction (list1 (fun));
+        # else if (!NILP (fun) && (fun = XSYMBOL (fun)->u.s.function, SYMBOLP (fun)))
+        #   fun = indirect_function (fun);
+        if not SYMBOLP(fun):
+            fun = F.function(list1(fun))
+        elif not NILP(fun) and SYMBOLP(fun := XSYMBOL(fun).u.s.function):
+            fun = indirect_function(fun)
+        #
+        # if (SUBRP (fun) && !SUBR_NATIVE_COMPILED_DYNP (fun))
+        #   {
+        if SUBRP(fun) and not SUBR_NATIVE_COMPILED_DYNP(fun):
+            # Lisp_Object args_left = original_args;
+            args_left = original_args
+            # ptrdiff_t numargs = list_length (args_left);
+            numargs = list_length(args_left)
+            #
+            # if (numargs < XSUBR (fun)->min_args
+            #     || (XSUBR (fun)->max_args >= 0
+            #         && XSUBR (fun)->max_args < numargs))
+            #   xsignal2 (Qwrong_number_of_arguments, original_fun,
+            #             make_fixnum (numargs));
+            if numargs < XSUBR(fun).min_args \
+                    or (XSUBR(fun).max_args >= 0
+                        and XSUBR(fun).max_args < numargs):
+                return xsignal2(Q.wrong_number_of_arguments, original_fun,
+                                make_fixnum(numargs))
+            #
+            # else if (XSUBR (fun)->max_args == UNEVALLED)
+            #   val = (XSUBR (fun)->function.aUNEVALLED) (args_left);
+            if XSUBR(fun).max_args == UNEVALLED:
+                val = XSUBR(fun).function(args_left)
+                # else if (XSUBR (fun)->max_args == MANY)
+                #   {
+            elif XSUBR(fun).max_args == MANY:
+                # /* Pass a vector of evaluated arguments.  */
+                # Lisp_Object *vals;
+                # ptrdiff_t argnum = 0;
+                argnum = 0
+                # USE_SAFE_ALLOCA;
+                #
+                # SAFE_ALLOCA_LISP (vals, numargs);
+                vals = [Q.nil] * numargs
+                #
+                # while (CONSP (args_left) && argnum < numargs)
+                #   {
+                while CONSP(args_left) and argnum < numargs:
+                    # Lisp_Object arg = XCAR (args_left);
+                    arg = XCAR(args_left)
+                    # args_left = XCDR (args_left);
+                    args_left = XCDR(args_left)
+                    # vals[argnum++] = eval_sub (arg);
+                    vals[argnum] = eval_sub(arg)
+                    argnum += 1
+                #   }
+                #
+                # set_backtrace_args (specpdl + count, vals, argnum);
+                #
+                # val = XSUBR (fun)->function.aMANY (argnum, vals);
+                val = XSUBR(fun).function(*vals)
+                #
+                # lisp_eval_depth--;
+                # /* Do the debug-on-exit now, while VALS still exists.  */
+                # if (backtrace_debug_on_exit (specpdl + count))
+                #   val = call_debugger (list2 (Qexit, val));
+                # SAFE_FREE ();
+                # specpdl_ptr--;
+                # return val;
+                return val
+                #   }
+                # else
+                #   {
+            else:
+                # int i, maxargs = XSUBR (fun)->max_args;
+                maxargs = XSUBR(fun).max_args
+                #
+                # for (i = 0; i < maxargs; i++)
+                #   {
+                for i in range(maxargs):
+                    # argvals[i] = eval_sub (Fcar (args_left));
+                    argvals.append(eval_sub(F.car(args_left)))
+                    # args_left = Fcdr (args_left);
+                    args_left = F.cdr(args_left)
+                #   }
+                #
+                # set_backtrace_args (specpdl + count, argvals, numargs);
+                #
+                val = XSUBR(fun).function(*argvals)
+                # switch (i)
+                #   {
+                #   case 0:
+                #     val = (XSUBR (fun)->function.a0 ());
+                #     break;
+                #   case 1:
+                #     val = (XSUBR (fun)->function.a1 (argvals[0]));
+                #     break;
+                #   case 2:
+                #     val = (XSUBR (fun)->function.a2 (argvals[0], argvals[1]));
+                #     break;
+                #   case 3:
+                #     val = (XSUBR (fun)->function.a3
+                #            (argvals[0], argvals[1], argvals[2]));
+                #     break;
+                #   case 4:
+                #     val = (XSUBR (fun)->function.a4
+                #            (argvals[0], argvals[1], argvals[2], argvals[3]));
+                #     break;
+                #   case 5:
+                #     val = (XSUBR (fun)->function.a5
+                #            (argvals[0], argvals[1], argvals[2], argvals[3],
+                #             argvals[4]));
+                #     break;
+                #   case 6:
+                #     val = (XSUBR (fun)->function.a6
+                #            (argvals[0], argvals[1], argvals[2], argvals[3],
+                #             argvals[4], argvals[5]));
+                #     break;
+                #   case 7:
+                #     val = (XSUBR (fun)->function.a7
+                #            (argvals[0], argvals[1], argvals[2], argvals[3],
+                #             argvals[4], argvals[5], argvals[6]));
+                #     break;
+                #
+                #   case 8:
+                #     val = (XSUBR (fun)->function.a8
+                #            (argvals[0], argvals[1], argvals[2], argvals[3],
+                #             argvals[4], argvals[5], argvals[6], argvals[7]));
+                #     break;
+                #
+                #   default:
+                #     /* Someone has created a subr that takes more arguments than
+                #        is supported by this code.  We need to either rewrite the
+                #        subr to use a different argument protocol, or add more
+                #        cases to this switch.  */
+                #   emacs_abort ();
+                #   }
+            #   }
+            #   }
+            # else if (COMPILEDP (fun)
+            #          || SUBR_NATIVE_COMPILED_DYNP (fun)
+            #          || MODULE_FUNCTIONP (fun))
+        elif COMPILEDP(fun) \
+            or SUBR_NATIVE_COMPILED_DYNP(fun) \
+            or MODULE_FUNCTIONP(fun):
+            #   return apply_lambda (fun, original_args, count);
+            return apply_lambda(fun, original_args, count)
+            # else
+            #   {
+        else:
+            # if (NILP (fun))
+            #   xsignal1 (Qvoid_function, original_fun);
+            if NILP(fun):
+                xsignal1(Q.void_function, original_fun)
+            # if (!CONSP (fun))
+            #   xsignal1 (Qinvalid_function, original_fun);
+            if not CONSP(fun):
+                xsignal1(Q.invalid_function, original_fun)
+            # funcar = XCAR (fun);
+            funcar = XCAR(fun)
+            # if (!SYMBOLP (funcar))
+            #   xsignal1 (Qinvalid_function, original_fun);
+            if not SYMBOLP(funcar):
+                xsignal1(Q.invalid_function, original_fun)
+            # if (EQ (funcar, Qautoload))
+            #   {
+            if EQ(funcar, Q.autoload):
+                # Fautoload_do_load (fun, original_fun, Qnil);
+                F.autoload_do_load(fun, original_fun, Q.nil)
+                # goto retry;
+                continue
+            #   }
+            # if (EQ (funcar, Qmacro))
+            #   {
+            if EQ(funcar, Q.macro):
+                # ptrdiff_t count1 = SPECPDL_INDEX ();
+                # Lisp_Object exp;
+                # /* Bind lexical-binding during expansion of the macro, so the
+                #    macro can know reliably if the code it outputs will be
+                #    interpreted using lexical-binding or not.  */
+                # specbind (Qlexical_binding,
+                #           NILP (Vinternal_interpreter_environment) ? Qnil : Qt);
+                # exp = apply1 (Fcdr (fun), original_args);
+                exp = apply1(F.cdr(fun), original_args)
+                # exp = unbind_to (count1, exp);
+                # val = eval_sub (exp);
+                val = eval_sub(exp)
+                #   }
+                # else if (EQ (funcar, Qlambda)
+                #          || EQ (funcar, Qclosure))
+            elif EQ(funcar, Q.lambda_) \
+                or EQ(funcar, Q.closure):
+                # return apply_lambda (fun, original_args, count);
+                return apply_lambda(fun, original_args, count)
+                # else
+            else:
+                # xsignal1 (Qinvalid_function, original_fun);
+                xsignal1(Q.invalid_function, original_fun)
+        #   }
+        #
+        # lisp_eval_depth--;
+        # if (backtrace_debug_on_exit (specpdl + count))
+        #   val = call_debugger (list2 (Qexit, val));
+        # specpdl_ptr--;
+        #
+        return val
 # }
 # 
 # DEFUN ("apply", Fapply, Sapply, 1, MANY, 0,
@@ -2992,6 +3085,8 @@ def error(m: str, *ap):
 # {
 #   return Ffuncall (1, &fn);
 # }
+def call0(fn: Lisp_Object):
+    return F.funcall(fn)
 #
 # /* Call function fn with 1 argument arg1.  */
 # Lisp_Object
@@ -2999,6 +3094,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1);
 # }
+def call1(fn: Lisp_Object, arg1: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1)
 #
 # /* Call function fn with 2 arguments arg1, arg2.  */
 # Lisp_Object
@@ -3006,6 +3103,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2);
 # }
+def call2(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2)
 #
 # /* Call function fn with 3 arguments arg1, arg2, arg3.  */
 # Lisp_Object
@@ -3013,6 +3112,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3);
 # }
+def call3(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3)
 #
 # /* Call function fn with 4 arguments arg1, arg2, arg3, arg4.  */
 # Lisp_Object
@@ -3021,6 +3122,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3, arg4);
 # }
+def call4(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object, arg4: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3, arg4)
 #
 # /* Call function fn with 5 arguments arg1, arg2, arg3, arg4, arg5.  */
 # Lisp_Object
@@ -3029,6 +3132,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3, arg4, arg5);
 # }
+def call5(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object, arg4: Lisp_Object, arg5: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3, arg4, arg5)
 #
 # /* Call function fn with 6 arguments arg1, arg2, arg3, arg4, arg5, arg6.  */
 # Lisp_Object
@@ -3037,6 +3142,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3, arg4, arg5, arg6);
 # }
+def call6(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object, arg4: Lisp_Object, arg5: Lisp_Object, arg6: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3, arg4, arg5, arg6)
 #
 # /* Call function fn with 7 arguments arg1, arg2, arg3, arg4, arg5, arg6, arg7.  */
 # Lisp_Object
@@ -3045,6 +3152,8 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 # }
+def call7(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object, arg4: Lisp_Object, arg5: Lisp_Object, arg6: Lisp_Object, arg7: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 #
 # /* Call function fn with 8 arguments arg1, arg2, arg3, arg4, arg5,
 #    arg6, arg7, arg8.  */
@@ -3055,119 +3164,185 @@ def error(m: str, *ap):
 # {
 #   return CALLN (Ffuncall, fn, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 # }
-#
-# DEFUN ("functionp", Ffunctionp, Sfunctionp, 1, 1, 0,
-#        doc: /* Return t if OBJECT is a function.  */)
-#      (Lisp_Object object)
-# {
-#   if (FUNCTIONP (object))
-#     return Qt;
-#   return Qnil;
-# }
+def call8(fn: Lisp_Object, arg1: Lisp_Object, arg2: Lisp_Object, arg3: Lisp_Object, arg4: Lisp_Object, arg5: Lisp_Object, arg6: Lisp_Object, arg7: Lisp_Object, arg8: Lisp_Object):
+    return CALLN(F.funcall, fn, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+
+@mixin(F)
+class F:
+    # DEFUN ("functionp", Ffunctionp, Sfunctionp, 1, 1, 0,
+    #        doc: /* Return t if OBJECT is a function.  */)
+    #      (Lisp_Object object)
+    # {
+    @DEFUN("functionp", S.functionp, 1, 1, 0)
+    @staticmethod
+    def functionp(object: Lisp_Object):
+        #   if (FUNCTIONP (object))
+        #     return Qt;
+        if FUNCTIONP(object):
+            return Q.t
+        #   return Qnil;
+        return Q.nil
+    # }
 #
 # bool
 # FUNCTIONP (Lisp_Object object)
 # {
-#   if (SYMBOLP (object) && !NILP (Ffboundp (object)))
-#     {
-#       object = Findirect_function (object, Qt);
-#
-#       if (CONSP (object) && EQ (XCAR (object), Qautoload))
-#         {
-#           /* Autoloaded symbols are functions, except if they load
-#              macros or keymaps.  */
-#           for (int i = 0; i < 4 && CONSP (object); i++)
-#             object = XCDR (object);
-#
-#           return ! (CONSP (object) && !NILP (XCAR (object)));
-#         }
-#     }
-#
-#   if (SUBRP (object))
-#     return XSUBR (object)->max_args != UNEVALLED;
-#   else if (COMPILEDP (object) || MODULE_FUNCTIONP (object))
-#     return true;
-#   else if (CONSP (object))
-#     {
-#       Lisp_Object car = XCAR (object);
-#       return EQ (car, Qlambda) || EQ (car, Qclosure);
-#     }
-#   else
-#     return false;
+def FUNCTIONP(object: Lisp_Object):
+    # if (SYMBOLP (object) && !NILP (Ffboundp (object)))
+    #   {
+    if SYMBOLP(object) and not NILP(F.fboundp(object)):
+        # object = Findirect_function (object, Qt);
+        object = F.indirect_function(object, Q.t)
+        #
+        # if (CONSP (object) && EQ (XCAR (object), Qautoload))
+        #   {
+        if CONSP(object) and EQ(XCAR(object), Q.autoload):
+            # /* Autoloaded symbols are functions, except if they load
+            #    macros or keymaps.  */
+            # for (int i = 0; i < 4 && CONSP (object); i++)
+            #   object = XCDR (object);
+            for i in range(4):
+                if not CONSP(object):
+                    break
+                object = XCDR(object)
+            #
+            # return ! (CONSP (object) && !NILP (XCAR (object)));
+            return not CONSP(object) and not NILP(XCAR(object))
+        #   }
+    #   }
+    #
+    # if (SUBRP (object))
+    #   return XSUBR (object)->max_args != UNEVALLED;
+    if SUBRP(object):
+        return XSUBR(object).max_args != UNEVALLED
+        # else if (COMPILEDP (object) || MODULE_FUNCTIONP (object))
+    elif COMPILED_P(object) or MODULE_FUNCTIONP(object):
+        #   return true;
+        return true
+        # else if (CONSP (object))
+        #   {
+    elif CONSP(object):
+        #     Lisp_Object car = XCAR (object);
+        car = XCAR(object)
+        #     return EQ (car, Qlambda) || EQ (car, Qclosure);
+        return EQ(car, Q.lambda_) or EQ(car, Q.closure)
+        #   }
+        # else
+    else:
+        #   return false;
+        return false
 # }
 #
-# DEFUN ("funcall", Ffuncall, Sfuncall, 1, MANY, 0,
-#        doc: /* Call first argument as a function, passing remaining arguments to it.
-# Return the value that function returns.
-# Thus, (funcall \\='cons \\='x \\='y) returns (x . y).
-# usage: (funcall FUNCTION &rest ARGUMENTS)  */)
-#   (ptrdiff_t nargs, Lisp_Object *args)
-# {
-#   Lisp_Object fun, original_fun;
-#   Lisp_Object funcar;
-#   ptrdiff_t numargs = nargs - 1;
-#   Lisp_Object val;
-#   ptrdiff_t count;
-#
-#   maybe_quit ();
-#
-#   if (++lisp_eval_depth > max_lisp_eval_depth)
-#     {
-#       if (max_lisp_eval_depth < 100)
-#         max_lisp_eval_depth = 100;
-#       if (lisp_eval_depth > max_lisp_eval_depth)
-#         error ("Lisp nesting exceeds `max-lisp-eval-depth'");
-#     }
-#
-#   count = record_in_backtrace (args[0], &args[1], nargs - 1);
-#
-#   maybe_gc ();
-#
-#   if (debug_on_next_call)
-#     do_debug_on_call (Qlambda, count);
-#
-#   original_fun = args[0];
-#
-#  retry:
-#
-#   /* Optimize for no indirection.  */
-#   fun = original_fun;
-#   if (SYMBOLP (fun) && !NILP (fun)
-#       && (fun = XSYMBOL (fun)->u.s.function, SYMBOLP (fun)))
-#     fun = indirect_function (fun);
-#
-#   if (SUBRP (fun) && !SUBR_NATIVE_COMPILED_DYNP (fun))
-#     val = funcall_subr (XSUBR (fun), numargs, args + 1);
-#   else if (COMPILEDP (fun)
-#            || SUBR_NATIVE_COMPILED_DYNP (fun)
-#            || MODULE_FUNCTIONP (fun))
-#     val = funcall_lambda (fun, numargs, args + 1);
-#   else
-#     {
-#       if (NILP (fun))
-#         xsignal1 (Qvoid_function, original_fun);
-#       if (!CONSP (fun))
-#         xsignal1 (Qinvalid_function, original_fun);
-#       funcar = XCAR (fun);
-#       if (!SYMBOLP (funcar))
-#         xsignal1 (Qinvalid_function, original_fun);
-#       if (EQ (funcar, Qlambda)
-#           || EQ (funcar, Qclosure))
-#         val = funcall_lambda (fun, numargs, args + 1);
-#       else if (EQ (funcar, Qautoload))
-#         {
-#           Fautoload_do_load (fun, original_fun, Qnil);
-#           goto retry;
-#         }
-#       else
-#         xsignal1 (Qinvalid_function, original_fun);
-#     }
-#   lisp_eval_depth--;
-#   if (backtrace_debug_on_exit (specpdl + count))
-#     val = call_debugger (list2 (Qexit, val));
-#   specpdl_ptr--;
-#   return val;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("funcall", Ffuncall, Sfuncall, 1, MANY, 0,
+    #        doc: /* Call first argument as a function, passing remaining arguments to it.
+    # Return the value that function returns.
+    # Thus, (funcall \\='cons \\='x \\='y) returns (x . y).
+    # usage: (funcall FUNCTION &rest ARGUMENTS)  */)
+    #   (ptrdiff_t nargs, Lisp_Object *args)
+    # {
+    @DEFUN("funcall", S.funcall, 1, MANY, 0)
+    @staticmethod
+    def funcall(*args: Lisp_Object):
+        nargs = len(args)
+        # Lisp_Object fun, original_fun;
+        # Lisp_Object funcar;
+        # ptrdiff_t numargs = nargs - 1;
+        args = [arg for arg in args]
+        numargs = nargs - 1
+        # Lisp_Object val;
+        val = Q.nil
+        # ptrdiff_t count;
+        #
+        # maybe_quit ();
+        maybe_quit()
+        #
+        # if (++lisp_eval_depth > max_lisp_eval_depth)
+        #   {
+        #     if (max_lisp_eval_depth < 100)
+        #       max_lisp_eval_depth = 100;
+        #     if (lisp_eval_depth > max_lisp_eval_depth)
+        #       error ("Lisp nesting exceeds `max-lisp-eval-depth'");
+        #   }
+        #
+        # count = record_in_backtrace (args[0], &args[1], nargs - 1);
+        #
+        # maybe_gc ();
+        #
+        # if (debug_on_next_call)
+        #   do_debug_on_call (Qlambda, count);
+        #
+        # original_fun = args[0];
+        original_fun = args[0]
+        #
+        #retry:
+        #
+        while True:
+            # /* Optimize for no indirection.  */
+            # fun = original_fun;
+            fun = original_fun
+            # if (SYMBOLP (fun) && !NILP (fun)
+            #     && (fun = XSYMBOL (fun)->u.s.function, SYMBOLP (fun)))
+            if SYMBOLP(fun) and not NILP(fun) \
+                and SYMBOLP(fun := XSYMBOL(fun).u.s.function):
+                # fun = indirect_function (fun);
+                fun = indirect_function(fun)
+            #
+            # if (SUBRP (fun) && !SUBR_NATIVE_COMPILED_DYNP (fun))
+            if SUBRP(fun) and not SUBR_NATIVE_COMPILED_DYNP(fun):
+                # val = funcall_subr (XSUBR (fun), numargs, args + 1);
+                val = funcall_subr(XSUBR(fun), numargs, args[1:])
+                # else if (COMPILEDP (fun)
+                #          || SUBR_NATIVE_COMPILED_DYNP (fun)
+                #          || MODULE_FUNCTIONP (fun))
+            elif COMPILEDP(fun) or SUBR_NATIVE_COMPILED_DYNP(fun) or MODULE_FUNCTIONP(fun):
+                # val = funcall_lambda (fun, numargs, args + 1);
+                val = funcall_lambda(fun, numargs, args[1:])
+                # else
+                #   {
+            else:
+                # if (NILP (fun))
+                #   xsignal1 (Qvoid_function, original_fun);
+                if NILP(fun):
+                    xsignal1(Q.void_function, original_fun)
+                # if (!CONSP (fun))
+                #   xsignal1 (Qinvalid_function, original_fun);
+                if not CONSP(fun):
+                    xsignal1(Q.invalid_function, original_fun)
+                # funcar = XCAR (fun);
+                funcar = XCAR(fun)
+                # if (!SYMBOLP (funcar))
+                if not SYMBOLP(funcar):
+                    # xsignal1 (Qinvalid_function, original_fun);
+                    xsignal1(Q.invalid_function, original_fun)
+                # if (EQ (funcar, Qlambda)
+                #     || EQ (funcar, Qclosure))
+                if EQ(funcar, Q.lambda_) \
+                    or EQ(funcar, Q.closure):
+                    # val = funcall_lambda (fun, numargs, args + 1);
+                    val = funcall_lambda(fun, numargs, args[1:])
+                    # else if (EQ (funcar, Qautoload))
+                    #   {
+                elif EQ(funcar, Q.autoload):
+                    #     Fautoload_do_load (fun, original_fun, Qnil);
+                    F.autoload_do_load(fun, original_fun, Q.nil)
+                    #     goto retry;
+                    continue
+                    #   }
+                    # else
+                    #   xsignal1 (Qinvalid_function, original_fun);
+                else:
+                    xsignal1(Q.invalid_function, original_fun)
+            # }
+            break
+        # lisp_eval_depth--;
+        # if (backtrace_debug_on_exit (specpdl + count))
+        #   val = call_debugger (list2 (Qexit, val));
+        # specpdl_ptr--;
+        # return val;
+        return val
+    # }
 # 
 #
 # /* Apply a C subroutine SUBR to the NUMARGS evaluated arguments in ARG_VECTOR
@@ -3176,80 +3351,135 @@ def error(m: str, *ap):
 # Lisp_Object
 # funcall_subr (struct Lisp_Subr *subr, ptrdiff_t numargs, Lisp_Object *args)
 # {
-#   if (numargs < subr->min_args
-#       || (subr->max_args >= 0 && subr->max_args < numargs))
-#     {
-#       Lisp_Object fun;
-#       XSETSUBR (fun, subr);
-#       xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (numargs));
-#     }
-#
-#   else if (subr->max_args == UNEVALLED)
-#     {
-#       Lisp_Object fun;
-#       XSETSUBR (fun, subr);
-#       xsignal1 (Qinvalid_function, fun);
-#     }
-#
-#   else if (subr->max_args == MANY)
-#     return (subr->function.aMANY) (numargs, args);
-#   else
-#     {
-#       Lisp_Object internal_argbuf[8];
-#       Lisp_Object *internal_args;
-#       if (subr->max_args > numargs)
-#         {
-#           eassert (subr->max_args <= ARRAYELTS (internal_argbuf));
-#           internal_args = internal_argbuf;
-#           memcpy (internal_args, args, numargs * word_size);
-#           memclear (internal_args + numargs,
-#                     (subr->max_args - numargs) * word_size);
-#         }
-#       else
-#         internal_args = args;
-#       switch (subr->max_args)
-#         {
-#         case 0:
-#           return (subr->function.a0 ());
-#         case 1:
-#           return (subr->function.a1 (internal_args[0]));
-#         case 2:
-#           return (subr->function.a2
-#                   (internal_args[0], internal_args[1]));
-#         case 3:
-#           return (subr->function.a3
-#                   (internal_args[0], internal_args[1], internal_args[2]));
-#         case 4:
-#           return (subr->function.a4
-#                   (internal_args[0], internal_args[1], internal_args[2],
-#                    internal_args[3]));
-#         case 5:
-#           return (subr->function.a5
-#                   (internal_args[0], internal_args[1], internal_args[2],
-#                    internal_args[3], internal_args[4]));
-#         case 6:
-#           return (subr->function.a6
-#                   (internal_args[0], internal_args[1], internal_args[2],
-#                    internal_args[3], internal_args[4], internal_args[5]));
-#         case 7:
-#           return (subr->function.a7
-#                   (internal_args[0], internal_args[1], internal_args[2],
-#                    internal_args[3], internal_args[4], internal_args[5],
-#                    internal_args[6]));
-#         case 8:
-#           return (subr->function.a8
-#                   (internal_args[0], internal_args[1], internal_args[2],
-#                    internal_args[3], internal_args[4], internal_args[5],
-#                    internal_args[6], internal_args[7]));
-#
-#         default:
-#
-#           /* If a subr takes more than 8 arguments without using MANY
-#              or UNEVALLED, we need to extend this function to support it.
-#              Until this is done, there is no way to call the function.  */
-#           emacs_abort ();
-#         }
-#     }
+def funcall_subr(subr: Lisp_Subr, numargs: ptrdiff_t, args: List[Lisp_Object]):
+    #   if (numargs < subr->min_args
+    #       || (subr->max_args >= 0 && subr->max_args < numargs))
+    #     {
+    if numargs < subr.min_args \
+        or (subr.max_args >= 0 and subr.max_args < numargs):
+        # Lisp_Object fun;
+        # XSETSUBR (fun, subr);
+        fun = XSETSUBR(subr)
+        # xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (numargs));
+        xsignal2(Q.wrong_number_of_arguments, fun, make_fixnum (numargs))
+        #     }
+        #
+        #   else if (subr->max_args == UNEVALLED)
+        #     {
+    elif subr.max_args == UNEVALLED:
+        # Lisp_Object fun;
+        # XSETSUBR (fun, subr);
+        fun = XSETSUBR(subr)
+        # xsignal1 (Qinvalid_function, fun);
+        xsignal1(Q.invalid_function, fun)
+        #     }
+        #
+        #   else if (subr->max_args == MANY)
+    elif subr.max_args == MANY:
+        #     return (subr->function.aMANY) (numargs, args);
+        return subr.function(*args)
+        #   else
+        #     {
+    else:
+        # Lisp_Object internal_argbuf[8];
+        # Lisp_Object *internal_args;
+        # if (subr->max_args > numargs)
+        #   {
+        #     eassert (subr->max_args <= ARRAYELTS (internal_argbuf));
+        #     internal_args = internal_argbuf;
+        #     memcpy (internal_args, args, numargs * word_size);
+        #     memclear (internal_args + numargs,
+        #               (subr->max_args - numargs) * word_size);
+        #   }
+        # else
+        #   internal_args = args;
+        if subr.max_args > numargs:
+            internal_args = args[:numargs]
+        else:
+            internal_args = args
+        # switch (subr->max_args)
+        #   {
+        #   case 0:
+        #     return (subr->function.a0 ());
+        if subr.max_args == 0:
+            return subr.function()
+        #   case 1:
+        #     return (subr->function.a1 (internal_args[0]));
+        if subr.max_args == 1:
+            return subr.function(internal_args[0])
+        #   case 2:
+        #     return (subr->function.a2
+        #             (internal_args[0], internal_args[1]));
+        if subr.max_args == 2:
+            return subr.function(internal_args[0], internal_args[1])
+        #   case 3:
+        #     return (subr->function.a3
+        #             (internal_args[0], internal_args[1], internal_args[2]));
+        if subr.max_args == 3:
+            return subr.function(internal_args[0], internal_args[1], internal_args[2])
+        #   case 4:
+        #     return (subr->function.a4
+        #             (internal_args[0], internal_args[1], internal_args[2],
+        #              internal_args[3]));
+        if subr.max_args == 4:
+            return subr.function(internal_args[0], internal_args[1], internal_args[2], internal_args[3])
+        #   case 5:
+        #     return (subr->function.a5
+        #             (internal_args[0], internal_args[1], internal_args[2],
+        #              internal_args[3], internal_args[4]));
+        if subr.max_args == 5:
+            return subr.function(internal_args[0], internal_args[1], internal_args[2], internal_args[3], internal_args[4])
+        #   case 6:
+        #     return (subr->function.a6
+        #             (internal_args[0], internal_args[1], internal_args[2],
+        #              internal_args[3], internal_args[4], internal_args[5]));
+        if subr.max_args == 6:
+            return subr.function(
+                internal_args[0],
+                internal_args[1],
+                internal_args[2],
+                internal_args[3],
+                internal_args[4],
+                internal_args[5])
+        #   case 7:
+        #     return (subr->function.a7
+        #             (internal_args[0], internal_args[1], internal_args[2],
+        #              internal_args[3], internal_args[4], internal_args[5],
+        #              internal_args[6]));
+        if subr.max_args == 7:
+            return subr.function(
+                internal_args[0],
+                internal_args[1],
+                internal_args[2],
+                internal_args[3],
+                internal_args[4],
+                internal_args[5],
+                internal_args[6])
+        #   case 8:
+        #     return (subr->function.a8
+        #             (internal_args[0], internal_args[1], internal_args[2],
+        #              internal_args[3], internal_args[4], internal_args[5],
+        #              internal_args[6], internal_args[7]));
+        if subr.max_args == 8:
+            return subr.function(
+                internal_args[0],
+                internal_args[1],
+                internal_args[2],
+                internal_args[3],
+                internal_args[4],
+                internal_args[5],
+                internal_args[6],
+                internal_args[7])
+        #
+        #   default:
+        #
+        #     /* If a subr takes more than 8 arguments without using MANY
+        #        or UNEVALLED, we need to extend this function to support it.
+        #        Until this is done, there is no way to call the function.  */
+        #     emacs_abort ();
+        emacs_abort()
+        #   }
+    #     }
 # }
 #
 # /* Call the compiled Lisp function FUN.  If we have not yet read FUN's
@@ -3270,31 +3500,42 @@ def error(m: str, *ap):
 # static Lisp_Object
 # apply_lambda (Lisp_Object fun, Lisp_Object args, ptrdiff_t count)
 # {
-#   Lisp_Object *arg_vector;
-#   Lisp_Object tem;
-#   USE_SAFE_ALLOCA;
-#
-#   ptrdiff_t numargs = list_length (args);
-#   SAFE_ALLOCA_LISP (arg_vector, numargs);
-#   Lisp_Object args_left = args;
-#
-#   for (ptrdiff_t i = 0; i < numargs; i++)
-#     {
-#       tem = Fcar (args_left), args_left = Fcdr (args_left);
-#       tem = eval_sub (tem);
-#       arg_vector[i] = tem;
-#     }
-#
-#   set_backtrace_args (specpdl + count, arg_vector, numargs);
-#   tem = funcall_lambda (fun, numargs, arg_vector);
-#
-#   lisp_eval_depth--;
-#   /* Do the debug-on-exit now, while arg_vector still exists.  */
-#   if (backtrace_debug_on_exit (specpdl + count))
-#     tem = call_debugger (list2 (Qexit, tem));
-#   SAFE_FREE ();
-#   specpdl_ptr--;
-#   return tem;
+def apply_lambda(fun: Lisp_Object, args: Lisp_Object, count: ptrdiff_t):
+    # Lisp_Object *arg_vector;
+    # Lisp_Object tem;
+    # USE_SAFE_ALLOCA;
+    #
+    # ptrdiff_t numargs = list_length (args);
+    numargs = list_length(args)
+    # SAFE_ALLOCA_LISP (arg_vector, numargs);
+    arg_vector = []
+    # Lisp_Object args_left = args;
+    args_left = args
+    #
+    # for (ptrdiff_t i = 0; i < numargs; i++)
+    #   {
+    for i in range(numargs):
+        # tem = Fcar (args_left), args_left = Fcdr (args_left);
+        tem = F.car(args_left)
+        args_left = F.cdr(args_left)
+        # tem = eval_sub (tem);
+        tem = eval_sub(tem)
+        # arg_vector[i] = tem;
+        arg_vector.append(tem)
+    #   }
+    #
+    # set_backtrace_args (specpdl + count, arg_vector, numargs);
+    # tem = funcall_lambda (fun, numargs, arg_vector);
+    tem = funcall_lambda(fun, numargs, arg_vector)
+    #
+    # lisp_eval_depth--;
+    # /* Do the debug-on-exit now, while arg_vector still exists.  */
+    # if (backtrace_debug_on_exit (specpdl + count))
+    #   tem = call_debugger (list2 (Qexit, tem));
+    # SAFE_FREE ();
+    # specpdl_ptr--;
+    # return tem;
+    return tem
 # }
 #
 # /* Apply a Lisp function FUN to the NARGS evaluated arguments in ARG_VECTOR
@@ -3306,131 +3547,134 @@ def error(m: str, *ap):
 # funcall_lambda (Lisp_Object fun, ptrdiff_t nargs,
 #                 register Lisp_Object *arg_vector)
 # {
-#   Lisp_Object val, syms_left, next, lexenv;
-#   ptrdiff_t count = SPECPDL_INDEX ();
-#   ptrdiff_t i;
-#   bool optional, rest;
-#
-#   if (CONSP (fun))
-#     {
-#       if (EQ (XCAR (fun), Qclosure))
-#         {
-#           Lisp_Object cdr = XCDR (fun);        /* Drop `closure'.  */
-#           if (! CONSP (cdr))
-#             xsignal1 (Qinvalid_function, fun);
-#           fun = cdr;
-#           lexenv = XCAR (fun);
-#         }
-#       else
-#         lexenv = Qnil;
-#       syms_left = XCDR (fun);
-#       if (CONSP (syms_left))
-#         syms_left = XCAR (syms_left);
-#       else
-#         xsignal1 (Qinvalid_function, fun);
-#     }
-#   else if (COMPILEDP (fun))
-#     {
-#       syms_left = AREF (fun, COMPILED_ARGLIST);
-#       if (FIXNUMP (syms_left))
-#         /* A byte-code object with an integer args template means we
-#            shouldn't bind any arguments, instead just call the byte-code
-#            interpreter directly; it will push arguments as necessary.
-#
-#            Byte-code objects with a nil args template (the default)
-#            have dynamically-bound arguments, and use the
-#            argument-binding code below instead (as do all interpreted
-#            functions, even lexically bound ones).  */
-#         {
-#           return fetch_and_exec_byte_code (fun, syms_left, nargs, arg_vector);
-#         }
-#       lexenv = Qnil;
-#     }
-# #ifdef HAVE_MODULES
-#   else if (MODULE_FUNCTIONP (fun))
-#     return funcall_module (fun, nargs, arg_vector);
-# #endif
-# #ifdef HAVE_NATIVE_COMP
-#   else if (SUBR_NATIVE_COMPILED_DYNP (fun))
-#     {
-#       syms_left = XSUBR (fun)->lambda_list;
-#       lexenv = Qnil;
-#     }
-# #endif
-#   else
-#     emacs_abort ();
-#
-#   i = optional = rest = 0;
-#   bool previous_rest = false;
-#   for (; CONSP (syms_left); syms_left = XCDR (syms_left))
-#     {
-#       maybe_quit ();
-#
-#       next = XCAR (syms_left);
-#       if (!SYMBOLP (next))
-#         xsignal1 (Qinvalid_function, fun);
-#
-#       if (EQ (next, Qand_rest))
-#         {
-#           if (rest || previous_rest)
-#             xsignal1 (Qinvalid_function, fun);
-#           rest = 1;
-#           previous_rest = true;
-#         }
-#       else if (EQ (next, Qand_optional))
-#         {
-#           if (optional || rest || previous_rest)
-#             xsignal1 (Qinvalid_function, fun);
-#           optional = 1;
-#         }
-#       else
-#         {
-#           Lisp_Object arg;
-#           if (rest)
-#             {
-#               arg = Flist (nargs - i, &arg_vector[i]);
-#               i = nargs;
-#             }
-#           else if (i < nargs)
-#             arg = arg_vector[i++];
-#           else if (!optional)
-#             xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (nargs));
-#           else
-#             arg = Qnil;
-#
-#           /* Bind the argument.  */
-#           if (!NILP (lexenv) && SYMBOLP (next))
-#             /* Lexically bind NEXT by adding it to the lexenv alist.  */
-#             lexenv = Fcons (Fcons (next, arg), lexenv);
-#           else
-#             /* Dynamically bind NEXT.  */
-#             specbind (next, arg);
-#           previous_rest = false;
-#         }
-#     }
-#
-#   if (!NILP (syms_left) || previous_rest)
-#     xsignal1 (Qinvalid_function, fun);
-#   else if (i < nargs)
-#     xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (nargs));
-#
-#   if (!EQ (lexenv, Vinternal_interpreter_environment))
-#     /* Instantiate a new lexical environment.  */
-#     specbind (Qinternal_interpreter_environment, lexenv);
-#
-#   if (CONSP (fun))
-#     val = Fprogn (XCDR (XCDR (fun)));
-#   else if (SUBR_NATIVE_COMPILEDP (fun))
-#     {
-#       eassert (SUBR_NATIVE_COMPILED_DYNP (fun));
-#       /* No need to use funcall_subr as we have zero arguments by
-#          construction.  */
-#       val = XSUBR (fun)->function.a0 ();
-#     }
-#   else
-#     val = fetch_and_exec_byte_code (fun, Qnil, 0, NULL);
-#
-#   return unbind_to (count, val);
+def funcall_lambda(fun: Lisp_Object, nargs: ptrdiff_t,
+                   arg_vector: List[Lisp_Object]):
+    # Lisp_Object val, syms_left, next, lexenv;
+    # ptrdiff_t count = SPECPDL_INDEX ();
+    # ptrdiff_t i;
+    # bool optional, rest;
+    #
+    # if (CONSP (fun))
+    #   {
+    #     if (EQ (XCAR (fun), Qclosure))
+    #       {
+    #         Lisp_Object cdr = XCDR (fun);        /* Drop `closure'.  */
+    #         if (! CONSP (cdr))
+    #           xsignal1 (Qinvalid_function, fun);
+    #         fun = cdr;
+    #         lexenv = XCAR (fun);
+    #       }
+    #     else
+    #       lexenv = Qnil;
+    #     syms_left = XCDR (fun);
+    #     if (CONSP (syms_left))
+    #       syms_left = XCAR (syms_left);
+    #     else
+    #       xsignal1 (Qinvalid_function, fun);
+    #   }
+    # else if (COMPILEDP (fun))
+    #   {
+    #     syms_left = AREF (fun, COMPILED_ARGLIST);
+    #     if (FIXNUMP (syms_left))
+    #       /* A byte-code object with an integer args template means we
+    #          shouldn't bind any arguments, instead just call the byte-code
+    #          interpreter directly; it will push arguments as necessary.
+    #
+    #          Byte-code objects with a nil args template (the default)
+    #          have dynamically-bound arguments, and use the
+    #          argument-binding code below instead (as do all interpreted
+    #          functions, even lexically bound ones).  */
+    #       {
+    #         return fetch_and_exec_byte_code (fun, syms_left, nargs, arg_vector);
+    #       }
+    #     lexenv = Qnil;
+    #   }
+    #ifdef HAVE_MODULES
+    # else if (MODULE_FUNCTIONP (fun))
+    #   return funcall_module (fun, nargs, arg_vector);
+    #endif
+    #ifdef HAVE_NATIVE_COMP
+    # else if (SUBR_NATIVE_COMPILED_DYNP (fun))
+    #   {
+    #     syms_left = XSUBR (fun)->lambda_list;
+    #     lexenv = Qnil;
+    #   }
+    #endif
+    # else
+    #   emacs_abort ();
+    #
+    # i = optional = rest = 0;
+    # bool previous_rest = false;
+    # for (; CONSP (syms_left); syms_left = XCDR (syms_left))
+    #   {
+    #     maybe_quit ();
+    #
+    #     next = XCAR (syms_left);
+    #     if (!SYMBOLP (next))
+    #       xsignal1 (Qinvalid_function, fun);
+    #
+    #     if (EQ (next, Qand_rest))
+    #       {
+    #         if (rest || previous_rest)
+    #           xsignal1 (Qinvalid_function, fun);
+    #         rest = 1;
+    #         previous_rest = true;
+    #       }
+    #     else if (EQ (next, Qand_optional))
+    #       {
+    #         if (optional || rest || previous_rest)
+    #           xsignal1 (Qinvalid_function, fun);
+    #         optional = 1;
+    #       }
+    #     else
+    #       {
+    #         Lisp_Object arg;
+    #         if (rest)
+    #           {
+    #             arg = Flist (nargs - i, &arg_vector[i]);
+    #             i = nargs;
+    #           }
+    #         else if (i < nargs)
+    #           arg = arg_vector[i++];
+    #         else if (!optional)
+    #           xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (nargs));
+    #         else
+    #           arg = Qnil;
+    #
+    #         /* Bind the argument.  */
+    #         if (!NILP (lexenv) && SYMBOLP (next))
+    #           /* Lexically bind NEXT by adding it to the lexenv alist.  */
+    #           lexenv = Fcons (Fcons (next, arg), lexenv);
+    #         else
+    #           /* Dynamically bind NEXT.  */
+    #           specbind (next, arg);
+    #         previous_rest = false;
+    #       }
+    #   }
+    #
+    # if (!NILP (syms_left) || previous_rest)
+    #   xsignal1 (Qinvalid_function, fun);
+    # else if (i < nargs)
+    #   xsignal2 (Qwrong_number_of_arguments, fun, make_fixnum (nargs));
+    #
+    # if (!EQ (lexenv, Vinternal_interpreter_environment))
+    #   /* Instantiate a new lexical environment.  */
+    #   specbind (Qinternal_interpreter_environment, lexenv);
+    #
+    # if (CONSP (fun))
+    #   val = Fprogn (XCDR (XCDR (fun)));
+    # else if (SUBR_NATIVE_COMPILEDP (fun))
+    #   {
+    #     eassert (SUBR_NATIVE_COMPILED_DYNP (fun));
+    #     /* No need to use funcall_subr as we have zero arguments by
+    #        construction.  */
+    #     val = XSUBR (fun)->function.a0 ();
+    #   }
+    # else
+    #   val = fetch_and_exec_byte_code (fun, Qnil, 0, NULL);
+    #
+    # return unbind_to (count, val);
+    raise NotImplementedError("funcall_lambda")
 # }
 #
 # DEFUN ("func-arity", Ffunc_arity, Sfunc_arity, 1, 1, 0,
@@ -4421,242 +4665,340 @@ def error(m: str, *ap):
 #   union specbinding *pdl = backtrace_top ();
 #   return (backtrace_p (pdl) ? backtrace_function (pdl) : Qnil);
 # }
-#
+
+@mixin(Q)
+class Q:
+    defvaralias = build_lisp_symbol("defvaralias")
+    internal_interpreter_environment = build_lisp_symbol("internal-interpreter-environment")
+    Cdebug_on_exit = build_lisp_symbol(":debug-on-exit")
+    Csuccess = build_lisp_symbol(":success")
+    internal_when_entered_debugger = build_lisp_symbol("internal-when-entered-debugger")
+    debug = build_lisp_symbol("debug")
+    Cdocumentation = build_lisp_symbol(":documentation")
+    closure = build_lisp_symbol("closure")
+    and_optional = build_lisp_symbol("&optional")
+    and_rest = build_lisp_symbol("&rest")
+    commandp = build_lisp_symbol("commandp")
+    interactive = build_lisp_symbol("interactive")
+    exit = build_lisp_symbol("exit")
+    macro = build_lisp_symbol("macro")
+    inhibit_debugger = build_lisp_symbol("inhibit-debugger")
+    autoload = build_lisp_symbol("autoload")
+    inhibit_quit = build_lisp_symbol("inhibit-quit")
+    setq = build_lisp_symbol("setq")
+
 # void
 # syms_of_eval (void)
 # {
-#   DEFVAR_INT ("max-specpdl-size", max_specpdl_size,
-#               doc: /* Limit on number of Lisp variable bindings and `unwind-protect's.
-#
-# If Lisp code tries to use more bindings than this amount, an error is
-# signaled.
-#
-# You can safely increase this variable substantially if the default
-# value proves inconveniently small.  However, if you increase it too
-# much, Emacs could run out of memory trying to make the stack bigger.
-# Note that this limit may be silently increased by the debugger if
-# `debug-on-error' or `debug-on-quit' is set.
-#
-# \"spec\" is short for \"special variables\", i.e., dynamically bound
-# variables.  \"PDL\" is short for \"push-down list\", which is an old
-# term for \"stack\".  */);
-#
-#   DEFVAR_INT ("max-lisp-eval-depth", max_lisp_eval_depth,
-#               doc: /* Limit on depth in `eval', `apply' and `funcall' before error.
-#
-# This limit serves to catch infinite recursions for you before they cause
-# actual stack overflow in C, which would be fatal for Emacs.
-# You can safely make it considerably larger than its default value,
-# if that proves inconveniently small.  However, if you increase it too far,
-# Emacs could overflow the real C stack, and crash.  */);
-#
-#   DEFVAR_LISP ("quit-flag", Vquit_flag,
-#                doc: /* Non-nil causes `eval' to abort, unless `inhibit-quit' is non-nil.
-# If the value is t, that means do an ordinary quit.
-# If the value equals `throw-on-input', that means quit by throwing
-# to the tag specified in `throw-on-input'; it's for handling `while-no-input'.
-# Typing C-g sets `quit-flag' to t, regardless of `inhibit-quit',
-# but `inhibit-quit' non-nil prevents anything from taking notice of that.  */);
-#   Vquit_flag = Qnil;
-#
-#   DEFVAR_LISP ("inhibit-quit", Vinhibit_quit,
-#                doc: /* Non-nil inhibits C-g quitting from happening immediately.
-# Note that `quit-flag' will still be set by typing C-g,
-# so a quit will be signaled as soon as `inhibit-quit' is nil.
-# To prevent this happening, set `quit-flag' to nil
-# before making `inhibit-quit' nil.  */);
-#   Vinhibit_quit = Qnil;
-#
-#   DEFSYM (Qsetq, "setq");
-#   DEFSYM (Qinhibit_quit, "inhibit-quit");
-#   DEFSYM (Qautoload, "autoload");
-#   DEFSYM (Qinhibit_debugger, "inhibit-debugger");
-#   DEFSYM (Qmacro, "macro");
-#
-#   /* Note that the process handling also uses Qexit, but we don't want
-#      to staticpro it twice, so we just do it here.  */
-#   DEFSYM (Qexit, "exit");
-#
-#   DEFSYM (Qinteractive, "interactive");
-#   DEFSYM (Qcommandp, "commandp");
-#   DEFSYM (Qand_rest, "&rest");
-#   DEFSYM (Qand_optional, "&optional");
-#   DEFSYM (Qclosure, "closure");
-#   DEFSYM (QCdocumentation, ":documentation");
-#   DEFSYM (Qdebug, "debug");
-#
-#   DEFVAR_LISP ("inhibit-debugger", Vinhibit_debugger,
-#                doc: /* Non-nil means never enter the debugger.
-# Normally set while the debugger is already active, to avoid recursive
-# invocations.  */);
-#   Vinhibit_debugger = Qnil;
-#
-#   DEFVAR_LISP ("debug-on-error", Vdebug_on_error,
-#                doc: /* Non-nil means enter debugger if an error is signaled.
-# Does not apply to errors handled by `condition-case' or those
-# matched by `debug-ignored-errors'.
-# If the value is a list, an error only means to enter the debugger
-# if one of its condition symbols appears in the list.
-# When you evaluate an expression interactively, this variable
-# is temporarily non-nil if `eval-expression-debug-on-error' is non-nil.
-# The command `toggle-debug-on-error' toggles this.
-# See also the variable `debug-on-quit' and `inhibit-debugger'.  */);
-#   Vdebug_on_error = Qnil;
-#
-#   DEFVAR_LISP ("debug-ignored-errors", Vdebug_ignored_errors,
-#     doc: /* List of errors for which the debugger should not be called.
-# Each element may be a condition-name or a regexp that matches error messages.
-# If any element applies to a given error, that error skips the debugger
-# and just returns to top level.
-# This overrides the variable `debug-on-error'.
-# It does not apply to errors handled by `condition-case'.  */);
-#   Vdebug_ignored_errors = Qnil;
-#
-#   DEFVAR_BOOL ("debug-on-quit", debug_on_quit,
-#     doc: /* Non-nil means enter debugger if quit is signaled (C-g, for example).
-# Does not apply if quit is handled by a `condition-case'.  */);
-#   debug_on_quit = 0;
-#
-#   DEFVAR_BOOL ("debug-on-next-call", debug_on_next_call,
-#                doc: /* Non-nil means enter debugger before next `eval', `apply' or `funcall'.  */);
-#
-#   DEFVAR_BOOL ("debugger-may-continue", debugger_may_continue,
-#                doc: /* Non-nil means debugger may continue execution.
-# This is nil when the debugger is called under circumstances where it
-# might not be safe to continue.  */);
-#   debugger_may_continue = 1;
-#
-#   DEFVAR_BOOL ("debugger-stack-frame-as-list", debugger_stack_frame_as_list,
-#                doc: /* Non-nil means display call stack frames as lists. */);
-#   debugger_stack_frame_as_list = 0;
-#
-#   DEFVAR_LISP ("debugger", Vdebugger,
-#                doc: /* Function to call to invoke debugger.
-# If due to frame exit, args are `exit' and the value being returned;
-#  this function's value will be returned instead of that.
-# If due to error, args are `error' and a list of the args to `signal'.
-# If due to `apply' or `funcall' entry, one arg, `lambda'.
-# If due to `eval' entry, one arg, t.  */);
-#   Vdebugger = Qnil;
-#
-#   DEFVAR_LISP ("signal-hook-function", Vsignal_hook_function,
-#                doc: /* If non-nil, this is a function for `signal' to call.
-# It receives the same arguments that `signal' was given.
-# The Edebug package uses this to regain control.  */);
-#   Vsignal_hook_function = Qnil;
-#
-#   DEFVAR_LISP ("debug-on-signal", Vdebug_on_signal,
-#                doc: /* Non-nil means call the debugger regardless of condition handlers.
-# Note that `debug-on-error', `debug-on-quit' and friends
-# still determine whether to handle the particular condition.  */);
-#   Vdebug_on_signal = Qnil;
-#
-#   DEFVAR_BOOL ("backtrace-on-error-noninteractive",
-#                backtrace_on_error_noninteractive,
-#                doc: /* Non-nil means print backtrace on error in batch mode.
-# If this is nil, errors in batch mode will just print the error
-# message upon encountering an unhandled error, without showing
-# the Lisp backtrace.  */);
-#   backtrace_on_error_noninteractive = true;
-#
-#   /* The value of num_nonmacro_input_events as of the last time we
-#    started to enter the debugger.  If we decide to enter the debugger
-#    again when this is still equal to num_nonmacro_input_events, then we
-#    know that the debugger itself has an error, and we should just
-#    signal the error instead of entering an infinite loop of debugger
-#    invocations.  */
-#   DEFSYM (Qinternal_when_entered_debugger, "internal-when-entered-debugger");
-#   DEFVAR_INT ("internal-when-entered-debugger", when_entered_debugger,
-#               doc: /* The number of keyboard events as of last time `debugger' was called.
-# Used to avoid infinite loops if the debugger itself has an error.
-# Don't set this unless you're sure that can't happen.  */);
-#
-#   /* When lexical binding is being used,
-#    Vinternal_interpreter_environment is non-nil, and contains an alist
-#    of lexically-bound variable, or (t), indicating an empty
-#    environment.  The lisp name of this variable would be
-#    `internal-interpreter-environment' if it weren't hidden.
-#    Every element of this list can be either a cons (VAR . VAL)
-#    specifying a lexical binding, or a single symbol VAR indicating
-#    that this variable should use dynamic scoping.  */
-#   DEFSYM (Qinternal_interpreter_environment,
-#           "internal-interpreter-environment");
-#   DEFVAR_LISP ("internal-interpreter-environment",
-#                 Vinternal_interpreter_environment,
-#                doc: /* If non-nil, the current lexical environment of the lisp interpreter.
-# When lexical binding is not being used, this variable is nil.
-# A value of `(t)' indicates an empty environment, otherwise it is an
-# alist of active lexical bindings.  */);
-#   Vinternal_interpreter_environment = Qnil;
-# #ifdef UNINTERN_INTERNAL_INTERPRETER_ENVIRONMENT
-#   /* Don't export this variable to Elisp, so no one can mess with it
-#      (Just imagine if someone makes it buffer-local).  */
-#   Funintern (Qinternal_interpreter_environment, Qnil);
-# #endif
-#
-#   Vrun_hooks = intern_c_string ("run-hooks");
-#   staticpro (&Vrun_hooks);
-#
-#   staticpro (&Vautoload_queue);
-#   Vautoload_queue = Qnil;
-#   staticpro (&Vsignaling_function);
-#   Vsignaling_function = Qnil;
-#
-#   staticpro (&Qcatch_all_memory_full);
-#   /* Make sure Qcatch_all_memory_full is a unique object.  We could
-#      also use something like Fcons (Qnil, Qnil), but json.c treats any
-#      cons cell as error data, so use an uninterned symbol instead.  */
-#   Qcatch_all_memory_full
-#     = Fmake_symbol (build_pure_c_string ("catch-all-memory-full"));
-#
-#   defsubr (&Sor);
-#   defsubr (&Sand);
-#   defsubr (&Sif);
-#   defsubr (&Scond);
-#   defsubr (&Sprogn);
-#   defsubr (&Sprog1);
-#   defsubr (&Ssetq);
-#   defsubr (&Squote);
-#   defsubr (&Sfunction);
-#   defsubr (&Sdefault_toplevel_value);
-#   defsubr (&Sset_default_toplevel_value);
-#   defsubr (&Sdefvar);
-#   defsubr (&Sdefvaralias);
-#   DEFSYM (Qdefvaralias, "defvaralias");
-#   defsubr (&Sdefconst);
-#   defsubr (&Sinternal__define_uninitialized_variable);
-#   defsubr (&Smake_var_non_special);
-#   defsubr (&Slet);
-#   defsubr (&SletX);
-#   defsubr (&Swhile);
-#   defsubr (&Sfuncall_with_delayed_message);
-#   defsubr (&Smacroexpand);
-#   defsubr (&Scatch);
-#   defsubr (&Sthrow);
-#   defsubr (&Sunwind_protect);
-#   defsubr (&Scondition_case);
-#   DEFSYM (QCsuccess, ":success");
-#   defsubr (&Ssignal);
-#   defsubr (&Scommandp);
-#   defsubr (&Sautoload);
-#   defsubr (&Sautoload_do_load);
-#   defsubr (&Seval);
-#   defsubr (&Sapply);
-#   defsubr (&Sfuncall);
-#   defsubr (&Sfunc_arity);
-#   defsubr (&Srun_hooks);
-#   defsubr (&Srun_hook_with_args);
-#   defsubr (&Srun_hook_with_args_until_success);
-#   defsubr (&Srun_hook_with_args_until_failure);
-#   defsubr (&Srun_hook_wrapped);
-#   defsubr (&Sfetch_bytecode);
-#   defsubr (&Sbacktrace_debug);
-#   DEFSYM (QCdebug_on_exit, ":debug-on-exit");
-#   defsubr (&Smapbacktrace);
-#   defsubr (&Sbacktrace_frame_internal);
-#   defsubr (&Sbacktrace_frames_from_thread);
-#   defsubr (&Sbacktrace_eval);
-#   defsubr (&Sbacktrace__locals);
-#   defsubr (&Sspecial_variable_p);
-#   defsubr (&Sfunctionp);
+def syms_of_eval():
+    #   DEFVAR_INT ("max-specpdl-size", max_specpdl_size,
+    #               doc: /* Limit on number of Lisp variable bindings and `unwind-protect's.
+    #
+    # If Lisp code tries to use more bindings than this amount, an error is
+    # signaled.
+    #
+    # You can safely increase this variable substantially if the default
+    # value proves inconveniently small.  However, if you increase it too
+    # much, Emacs could run out of memory trying to make the stack bigger.
+    # Note that this limit may be silently increased by the debugger if
+    # `debug-on-error' or `debug-on-quit' is set.
+    #
+    # \"spec\" is short for \"special variables\", i.e., dynamically bound
+    # variables.  \"PDL\" is short for \"push-down list\", which is an old
+    # term for \"stack\".  */);
+    #
+    #   DEFVAR_INT ("max-lisp-eval-depth", max_lisp_eval_depth,
+    #               doc: /* Limit on depth in `eval', `apply' and `funcall' before error.
+    #
+    # This limit serves to catch infinite recursions for you before they cause
+    # actual stack overflow in C, which would be fatal for Emacs.
+    # You can safely make it considerably larger than its default value,
+    # if that proves inconveniently small.  However, if you increase it too far,
+    # Emacs could overflow the real C stack, and crash.  */);
+    #
+    #   DEFVAR_LISP ("quit-flag", Vquit_flag,
+    #                doc: /* Non-nil causes `eval' to abort, unless `inhibit-quit' is non-nil.
+    # If the value is t, that means do an ordinary quit.
+    # If the value equals `throw-on-input', that means quit by throwing
+    # to the tag specified in `throw-on-input'; it's for handling `while-no-input'.
+    # Typing C-g sets `quit-flag' to t, regardless of `inhibit-quit',
+    # but `inhibit-quit' non-nil prevents anything from taking notice of that.  */);
+    #   Vquit_flag = Qnil;
+    V.quit_flag = Q.nil
+    #
+    #   DEFVAR_LISP ("inhibit-quit", Vinhibit_quit,
+    #                doc: /* Non-nil inhibits C-g quitting from happening immediately.
+    # Note that `quit-flag' will still be set by typing C-g,
+    # so a quit will be signaled as soon as `inhibit-quit' is nil.
+    # To prevent this happening, set `quit-flag' to nil
+    # before making `inhibit-quit' nil.  */);
+    #   Vinhibit_quit = Qnil;
+    V.inhibit_quit = Q.nil
+    #
+    #   DEFSYM (Qsetq, "setq");
+    DEFSYM(Q.setq, "setq")
+    #   DEFSYM (Qinhibit_quit, "inhibit-quit");
+    DEFSYM(Q.inhibit_quit, "inhibit-quit")
+    #   DEFSYM (Qautoload, "autoload");
+    DEFSYM(Q.autoload, "autoload")
+    #   DEFSYM (Qinhibit_debugger, "inhibit-debugger");
+    DEFSYM(Q.inhibit_debugger, "inhibit-debugger")
+    #   DEFSYM (Qmacro, "macro");
+    DEFSYM(Q.macro, "macro")
+    #
+    #   /* Note that the process handling also uses Qexit, but we don't want
+    #      to staticpro it twice, so we just do it here.  */
+    #   DEFSYM (Qexit, "exit");
+    DEFSYM(Q.exit, "exit")
+    #
+    #   DEFSYM (Qinteractive, "interactive");
+    DEFSYM(Q.interactive, "interactive")
+    #   DEFSYM (Qcommandp, "commandp");
+    DEFSYM(Q.commandp, "commandp")
+    #   DEFSYM (Qand_rest, "&rest");
+    DEFSYM(Q.and_rest, "&rest")
+    #   DEFSYM (Qand_optional, "&optional");
+    DEFSYM(Q.and_optional, "&optional")
+    #   DEFSYM (Qclosure, "closure");
+    DEFSYM(Q.closure, "closure")
+    #   DEFSYM (QCdocumentation, ":documentation");
+    DEFSYM(Q.Cdocumentation, ":documentation")
+    #   DEFSYM (Qdebug, "debug");
+    DEFSYM(Q.debug, "debug")
+    #
+    #   DEFVAR_LISP ("inhibit-debugger", Vinhibit_debugger,
+    #                doc: /* Non-nil means never enter the debugger.
+    # Normally set while the debugger is already active, to avoid recursive
+    # invocations.  */);
+    #   Vinhibit_debugger = Qnil;
+    V.inhibit_debugger = Q.nil
+    #
+    #   DEFVAR_LISP ("debug-on-error", Vdebug_on_error,
+    #                doc: /* Non-nil means enter debugger if an error is signaled.
+    # Does not apply to errors handled by `condition-case' or those
+    # matched by `debug-ignored-errors'.
+    # If the value is a list, an error only means to enter the debugger
+    # if one of its condition symbols appears in the list.
+    # When you evaluate an expression interactively, this variable
+    # is temporarily non-nil if `eval-expression-debug-on-error' is non-nil.
+    # The command `toggle-debug-on-error' toggles this.
+    # See also the variable `debug-on-quit' and `inhibit-debugger'.  */);
+    #   Vdebug_on_error = Qnil;
+    V.debug_on_error = Q.nil
+    #
+    #   DEFVAR_LISP ("debug-ignored-errors", Vdebug_ignored_errors,
+    #     doc: /* List of errors for which the debugger should not be called.
+    # Each element may be a condition-name or a regexp that matches error messages.
+    # If any element applies to a given error, that error skips the debugger
+    # and just returns to top level.
+    # This overrides the variable `debug-on-error'.
+    # It does not apply to errors handled by `condition-case'.  */);
+    #   Vdebug_ignored_errors = Qnil;
+    V.debug_ignored_errors = Q.nil
+    #
+    #   DEFVAR_BOOL ("debug-on-quit", debug_on_quit,
+    #     doc: /* Non-nil means enter debugger if quit is signaled (C-g, for example).
+    # Does not apply if quit is handled by a `condition-case'.  */);
+    #   debug_on_quit = 0;
+    G.debug_on_quit = 0
+    #
+    #   DEFVAR_BOOL ("debug-on-next-call", debug_on_next_call,
+    #                doc: /* Non-nil means enter debugger before next `eval', `apply' or `funcall'.  */);
+    #
+    #   DEFVAR_BOOL ("debugger-may-continue", debugger_may_continue,
+    #                doc: /* Non-nil means debugger may continue execution.
+    # This is nil when the debugger is called under circumstances where it
+    # might not be safe to continue.  */);
+    #   debugger_may_continue = 1;
+    #
+    #   DEFVAR_BOOL ("debugger-stack-frame-as-list", debugger_stack_frame_as_list,
+    #                doc: /* Non-nil means display call stack frames as lists. */);
+    #   debugger_stack_frame_as_list = 0;
+    #
+    #   DEFVAR_LISP ("debugger", Vdebugger,
+    #                doc: /* Function to call to invoke debugger.
+    # If due to frame exit, args are `exit' and the value being returned;
+    #  this function's value will be returned instead of that.
+    # If due to error, args are `error' and a list of the args to `signal'.
+    # If due to `apply' or `funcall' entry, one arg, `lambda'.
+    # If due to `eval' entry, one arg, t.  */);
+    #   Vdebugger = Qnil;
+    V.debugger = Q.nil
+    #
+    #   DEFVAR_LISP ("signal-hook-function", Vsignal_hook_function,
+    #                doc: /* If non-nil, this is a function for `signal' to call.
+    # It receives the same arguments that `signal' was given.
+    # The Edebug package uses this to regain control.  */);
+    #   Vsignal_hook_function = Qnil;
+    V.signal_hook_function = Q.nil
+    #
+    #   DEFVAR_LISP ("debug-on-signal", Vdebug_on_signal,
+    #                doc: /* Non-nil means call the debugger regardless of condition handlers.
+    # Note that `debug-on-error', `debug-on-quit' and friends
+    # still determine whether to handle the particular condition.  */);
+    #   Vdebug_on_signal = Qnil;
+    V.debug_on_signal = Q.nil
+    #
+    #   DEFVAR_BOOL ("backtrace-on-error-noninteractive",
+    #                backtrace_on_error_noninteractive,
+    #                doc: /* Non-nil means print backtrace on error in batch mode.
+    # If this is nil, errors in batch mode will just print the error
+    # message upon encountering an unhandled error, without showing
+    # the Lisp backtrace.  */);
+    #   backtrace_on_error_noninteractive = true;
+    #
+    #   /* The value of num_nonmacro_input_events as of the last time we
+    #    started to enter the debugger.  If we decide to enter the debugger
+    #    again when this is still equal to num_nonmacro_input_events, then we
+    #    know that the debugger itself has an error, and we should just
+    #    signal the error instead of entering an infinite loop of debugger
+    #    invocations.  */
+    #   DEFSYM (Qinternal_when_entered_debugger, "internal-when-entered-debugger");
+    DEFSYM(Q.internal_when_entered_debugger, "internal-when-entered-debugger")
+    #   DEFVAR_INT ("internal-when-entered-debugger", when_entered_debugger,
+    #               doc: /* The number of keyboard events as of last time `debugger' was called.
+    # Used to avoid infinite loops if the debugger itself has an error.
+    # Don't set this unless you're sure that can't happen.  */);
+    #
+    #   /* When lexical binding is being used,
+    #    Vinternal_interpreter_environment is non-nil, and contains an alist
+    #    of lexically-bound variable, or (t), indicating an empty
+    #    environment.  The lisp name of this variable would be
+    #    `internal-interpreter-environment' if it weren't hidden.
+    #    Every element of this list can be either a cons (VAR . VAL)
+    #    specifying a lexical binding, or a single symbol VAR indicating
+    #    that this variable should use dynamic scoping.  */
+    #   DEFSYM (Qinternal_interpreter_environment, "internal-interpreter-environment");
+    DEFSYM(Q.internal_interpreter_environment, "internal-interpreter-environment")
+    #   DEFVAR_LISP ("internal-interpreter-environment",
+    #                 Vinternal_interpreter_environment,
+    #                doc: /* If non-nil, the current lexical environment of the lisp interpreter.
+    # When lexical binding is not being used, this variable is nil.
+    # A value of `(t)' indicates an empty environment, otherwise it is an
+    # alist of active lexical bindings.  */);
+    #   Vinternal_interpreter_environment = Qnil;
+    V.internal_interpreter_environment = Q.nil
+    # #ifdef UNINTERN_INTERNAL_INTERPRETER_ENVIRONMENT
+    #   /* Don't export this variable to Elisp, so no one can mess with it
+    #      (Just imagine if someone makes it buffer-local).  */
+    #   Funintern (Qinternal_interpreter_environment, Qnil);
+    # #endif
+    #
+    #   Vrun_hooks = intern_c_string ("run-hooks");
+    #   staticpro (&Vrun_hooks);
+    #
+    #   staticpro (&Vautoload_queue);
+    #   Vautoload_queue = Qnil;
+    V.autoload_queue = Q.nil
+    #   staticpro (&Vsignaling_function);
+    #   Vsignaling_function = Qnil;
+    V.signaling_function = Q.nil
+    #
+    #   staticpro (&Qcatch_all_memory_full);
+    #   /* Make sure Qcatch_all_memory_full is a unique object.  We could
+    #      also use something like Fcons (Qnil, Qnil), but json.c treats any
+    #      cons cell as error data, so use an uninterned symbol instead.  */
+    #   Qcatch_all_memory_full
+    #     = Fmake_symbol (build_pure_c_string ("catch-all-memory-full"));
+    #
+    #   defsubr (&Sor);
+    defsubr(S.or_)
+    #   defsubr (&Sand);
+    defsubr(S.and_)
+    #   defsubr (&Sif);
+    defsubr(S.if_)
+    #   defsubr (&Scond);
+    defsubr(S.cond)
+    #   defsubr (&Sprogn);
+    defsubr(S.progn)
+    #   defsubr (&Sprog1);
+    defsubr(S.prog1)
+    #   defsubr (&Ssetq);
+    defsubr(S.setq)
+    #   defsubr (&Squote);
+    defsubr(S.quote)
+    #   defsubr (&Sfunction);
+    defsubr(S.function)
+    #   defsubr (&Sdefault_toplevel_value);
+    defsubr(S.default_toplevel_value)
+    #   defsubr (&Sset_default_toplevel_value);
+    defsubr(S.set_default_toplevel_value)
+    #   defsubr (&Sdefvar);
+    defsubr(S.defvar)
+    #   defsubr (&Sdefvaralias);
+    defsubr(S.defvaralias)
+    #   DEFSYM (Qdefvaralias, "defvaralias");
+    DEFSYM(Q.defvaralias, "defvaralias")
+    #   defsubr (&Sdefconst);
+    defsubr(S.defconst)
+    #   defsubr (&Sinternal__define_uninitialized_variable);
+    defsubr(S.internal__define_uninitialized_variable)
+    #   defsubr (&Smake_var_non_special);
+    defsubr(S.make_var_non_special)
+    #   defsubr (&Slet);
+    defsubr(S.let)
+    #   defsubr (&SletX);
+    defsubr(S.letX)
+    #   defsubr (&Swhile);
+    defsubr(S.while_)
+    #   defsubr (&Sfuncall_with_delayed_message);
+    defsubr(S.funcall_with_delayed_message)
+    #   defsubr (&Smacroexpand);
+    defsubr(S.macroexpand)
+    #   defsubr (&Scatch);
+    defsubr(S.catch)
+    #   defsubr (&Sthrow);
+    defsubr(S.throw)
+    #   defsubr (&Sunwind_protect);
+    defsubr(S.unwind_protect)
+    #   defsubr (&Scondition_case);
+    defsubr(S.condition_case)
+    #   DEFSYM (QCsuccess, ":success");
+    DEFSYM(Q.Csuccess, ":success")
+    #   defsubr (&Ssignal);
+    defsubr(S.signal)
+    #   defsubr (&Scommandp);
+    defsubr(S.commandp)
+    #   defsubr (&Sautoload);
+    defsubr(S.autoload)
+    #   defsubr (&Sautoload_do_load);
+    defsubr(S.autoload_do_load)
+    #   defsubr (&Seval);
+    defsubr(S.eval)
+    #   defsubr (&Sapply);
+    defsubr(S.apply)
+    #   defsubr (&Sfuncall);
+    defsubr(S.funcall)
+    #   defsubr (&Sfunc_arity);
+    defsubr(S.func_arity)
+    #   defsubr (&Srun_hooks);
+    defsubr(S.run_hooks)
+    #   defsubr (&Srun_hook_with_args);
+    defsubr(S.run_hook_with_args)
+    #   defsubr (&Srun_hook_with_args_until_success);
+    defsubr(S.run_hook_with_args_until_success)
+    #   defsubr (&Srun_hook_with_args_until_failure);
+    defsubr(S.run_hook_with_args_until_failure)
+    #   defsubr (&Srun_hook_wrapped);
+    defsubr(S.run_hook_wrapped)
+    #   defsubr (&Sfetch_bytecode);
+    defsubr(S.fetch_bytecode)
+    #   defsubr (&Sbacktrace_debug);
+    defsubr(S.backtrace_debug)
+    #   DEFSYM (QCdebug_on_exit, ":debug-on-exit");
+    DEFSYM(Q.Cdebug_on_exit, ":debug-on-exit")
+    #   defsubr (&Smapbacktrace);
+    defsubr(S.mapbacktrace)
+    #   defsubr (&Sbacktrace_frame_internal);
+    defsubr(S.backtrace_frame_internal)
+    #   defsubr (&Sbacktrace_frames_from_thread);
+    defsubr(S.backtrace_frames_from_thread)
+    #   defsubr (&Sbacktrace_eval);
+    defsubr(S.backtrace_eval)
+    #   defsubr (&Sbacktrace__locals);
+    defsubr(S.backtrace__locals)
+    #   defsubr (&Sspecial_variable_p);
+    defsubr(S.special_variable_p)
+    #   defsubr (&Sfunctionp);
+    defsubr(S.functionp)
 # }

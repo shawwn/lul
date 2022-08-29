@@ -491,6 +491,43 @@ from .buffer import *
 #   /* Special type to denote reserved memory.  */
 #   MEM_TYPE_SPARE
 # };
+class mem_type(enum.Enum):
+    MEM_TYPE_NON_LISP = enum.auto()
+    MEM_TYPE_CONS = enum.auto()
+    MEM_TYPE_STRING = enum.auto()
+    MEM_TYPE_SYMBOL = enum.auto()
+    MEM_TYPE_FLOAT = enum.auto()
+    # /* Since all non-bool pseudovectors are small enough to be
+    #    allocated from vector blocks, this memory type denotes
+    #    large regular vectors and large bool pseudovectors.  */
+    # MEM_TYPE_VECTORLIKE,
+    MEM_TYPE_VECTORLIKE = enum.auto()
+    # /* Special type to denote vector blocks.  */
+    # MEM_TYPE_VECTOR_BLOCK,
+    MEM_TYPE_VECTOR_BLOCK = enum.auto()
+    # /* Special type to denote reserved memory.  */
+    # MEM_TYPE_SPARE
+    MEM_TYPE_SPARE = enum.auto()
+
+
+MEM_TYPE_NON_LISP = mem_type.MEM_TYPE_NON_LISP
+MEM_TYPE_CONS = mem_type.MEM_TYPE_CONS
+MEM_TYPE_STRING = mem_type.MEM_TYPE_STRING
+MEM_TYPE_SYMBOL = mem_type.MEM_TYPE_SYMBOL
+MEM_TYPE_FLOAT = mem_type.MEM_TYPE_FLOAT
+# /* Since all non-bool pseudovectors are small enough to be
+#    allocated from vector blocks, this memory type denotes
+#    large regular vectors and large bool pseudovectors.  */
+# MEM_TYPE_VECTORLIKE,
+MEM_TYPE_VECTORLIKE = mem_type.MEM_TYPE_VECTORLIKE
+# /* Special type to denote vector blocks.  */
+# MEM_TYPE_VECTOR_BLOCK,
+MEM_TYPE_VECTOR_BLOCK = mem_type.MEM_TYPE_VECTOR_BLOCK
+# /* Special type to denote reserved memory.  */
+# MEM_TYPE_SPARE
+MEM_TYPE_SPARE = mem_type.MEM_TYPE_SPARE
+
+
 #
 # static bool
 # deadp (Lisp_Object x)
@@ -765,6 +802,8 @@ from .buffer import *
 # void *
 # xmalloc (size_t size)
 # {
+def xmalloc(size: size_t):
+    return bytearray(size)
 #   void *val;
 #
 #   MALLOC_BLOCK_INPUT;
@@ -799,6 +838,11 @@ from .buffer import *
 # void *
 # xrealloc (void *block, size_t size)
 # {
+def xrealloc(block: bytearray, size: int):
+    if len(block) < size:
+        block[len(block):len(block)] = b'\x00' * (size - len(block))
+    else:
+        del block[-(len(block) - size):]
 #   void *val;
 #
 #   MALLOC_BLOCK_INPUT;
@@ -822,6 +866,8 @@ from .buffer import *
 # void
 # xfree (void *block)
 # {
+def xfree(block: bytearray):
+    pass
 #   if (!block)
 #     return;
 #   if (pdumper_object_p (block))
@@ -1003,43 +1049,46 @@ from .buffer import *
 # static void *
 # lisp_malloc (size_t nbytes, bool clearit, enum mem_type type)
 # {
-#   register void *val;
-#
-#   MALLOC_BLOCK_INPUT;
-#
-# #ifdef GC_MALLOC_CHECK
-#   allocated_mem_type = type;
-# #endif
-#
-#   val = lmalloc (nbytes, clearit);
-#
-# #if ! USE_LSB_TAG
-#   /* If the memory just allocated cannot be addressed thru a Lisp
-#      object's pointer, and it needs to be,
-#      that's equivalent to running out of memory.  */
-#   if (val && type != MEM_TYPE_NON_LISP)
-#     {
-#       Lisp_Object tem;
-#       XSETCONS (tem, (char *) val + nbytes - 1);
-#       if ((char *) XCONS (tem) != (char *) val + nbytes - 1)
-#         {
-#           lisp_malloc_loser = val;
-#           free (val);
-#           val = 0;
-#         }
-#     }
-# #endif
-#
-# #ifndef GC_MALLOC_CHECK
-#   if (val && type != MEM_TYPE_NON_LISP)
-#     mem_insert (val, (char *) val + nbytes, type);
-# #endif
-#
-#   MALLOC_UNBLOCK_INPUT;
-#   if (!val)
-#     memory_full (nbytes);
-#   MALLOC_PROBE (nbytes);
-#   return val;
+def lisp_malloc(nbytes: int, clearit: bool_t, type: mem_type):
+    # register void *val;
+    #
+    # MALLOC_BLOCK_INPUT;
+    #
+    #ifdef GC_MALLOC_CHECK
+    # allocated_mem_type = type;
+    #endif
+    #
+    # val = lmalloc (nbytes, clearit);
+    val = lmalloc(nbytes, clearit)
+    #
+    #if ! USE_LSB_TAG
+    # /* If the memory just allocated cannot be addressed thru a Lisp
+    #    object's pointer, and it needs to be,
+    #    that's equivalent to running out of memory.  */
+    # if (val && type != MEM_TYPE_NON_LISP)
+    #   {
+    #     Lisp_Object tem;
+    #     XSETCONS (tem, (char *) val + nbytes - 1);
+    #     if ((char *) XCONS (tem) != (char *) val + nbytes - 1)
+    #       {
+    #         lisp_malloc_loser = val;
+    #         free (val);
+    #         val = 0;
+    #       }
+    #   }
+    #endif
+    #
+    #ifndef GC_MALLOC_CHECK
+    # if (val && type != MEM_TYPE_NON_LISP)
+    #   mem_insert (val, (char *) val + nbytes, type);
+    #endif
+    #
+    # MALLOC_UNBLOCK_INPUT;
+    # if (!val)
+    #   memory_full (nbytes);
+    # MALLOC_PROBE (nbytes);
+    # return val;
+    return val
 # }
 #
 # /* Free BLOCK.  This must be called to free memory allocated with a
@@ -1048,6 +1097,8 @@ from .buffer import *
 # static void
 # lisp_free (void *block)
 # {
+def lisp_free(block: bytearray):
+    pass
 #   if (pdumper_object_p (block))
 #     return;
 #
@@ -1358,31 +1409,33 @@ from .buffer import *
 # static void *
 # lmalloc (size_t size, bool clearit)
 # {
-# #ifdef USE_ALIGNED_ALLOC
-#   if (! MALLOC_IS_LISP_ALIGNED && size % LISP_ALIGNMENT == 0)
-#     {
-#       void *p = aligned_alloc (LISP_ALIGNMENT, size);
-#       if (p)
-#         {
-#           if (clearit)
-#             memclear (p, size);
-#         }
-#       else if (! (MALLOC_0_IS_NONNULL || size))
-#         return aligned_alloc (LISP_ALIGNMENT, LISP_ALIGNMENT);
-#       return p;
-#     }
-# #endif
-#
-#   while (true)
-#     {
-#       void *p = clearit ? calloc (1, size) : malloc (size);
-#       if (laligned (p, size) && (MALLOC_0_IS_NONNULL || size || p))
-#         return p;
-#       free (p);
-#       size_t bigger = size + LISP_ALIGNMENT;
-#       if (size < bigger)
-#         size = bigger;
-#     }
+def lmalloc(size, clearit: bool_t):
+    #ifdef USE_ALIGNED_ALLOC
+    # if (! MALLOC_IS_LISP_ALIGNED && size % LISP_ALIGNMENT == 0)
+    #   {
+    #     void *p = aligned_alloc (LISP_ALIGNMENT, size);
+    #     if (p)
+    #       {
+    #         if (clearit)
+    #           memclear (p, size);
+    #       }
+    #     else if (! (MALLOC_0_IS_NONNULL || size))
+    #       return aligned_alloc (LISP_ALIGNMENT, LISP_ALIGNMENT);
+    #     return p;
+    #   }
+    #endif
+    #
+    # while (true)
+    #   {
+    #     void *p = clearit ? calloc (1, size) : malloc (size);
+    #     if (laligned (p, size) && (MALLOC_0_IS_NONNULL || size || p))
+    #       return p;
+    #     free (p);
+    #     size_t bigger = size + LISP_ALIGNMENT;
+    #     if (size < bigger)
+    #       size = bigger;
+    #   }
+    return calloc(1, size) if clearit else malloc(size)
 # }
 #
 # static void *
@@ -1575,7 +1628,11 @@ from .buffer import *
 # } sdata;
 #
 # #define SDATA_NBYTES(S)        (S)->n.nbytes
+def SDATA_NBYTES(S):
+    return len(S)
 # #define SDATA_DATA(S)        ((struct sdata *) (S))->data
+def SDATA_DATA(S):
+    return S
 #
 # enum { SDATA_DATA_OFFSET = offsetof (struct sdata, data) };
 #
@@ -1651,8 +1708,11 @@ from .buffer import *
 #    "cookie" after each allocated string data block, and check for the
 #    presence of this cookie during GC.  */
 # # define GC_STRING_OVERRUN_COOKIE_SIZE ROUNDUP (4, alignof (sdata))
+# GC_STRING_OVERRUN_COOKIE_SIZE = ROUNDUP(4, alignof(sdata))
+GC_STRING_OVERRUN_COOKIE_SIZE = 4
 # static char const string_overrun_cookie[GC_STRING_OVERRUN_COOKIE_SIZE] =
 #   { '\xde', '\xad', '\xbe', '\xef', /* Perhaps some zeros here.  */ };
+string_overrun_cookie = b'\xde\xad\xbe\xef'
 #
 # #else
 # # define GC_STRING_OVERRUN_COOKIE_SIZE 0
@@ -1665,16 +1725,19 @@ from .buffer import *
 # static ptrdiff_t
 # sdata_size (ptrdiff_t n)
 # {
-#   /* Reserve space for the nbytes union member even when N + 1 is less
-#      than the size of that member.  */
-#   ptrdiff_t unaligned_size = max (SDATA_DATA_OFFSET + n + 1,
-#                                   sizeof (sdata));
-#   int sdata_align = max (FLEXALIGNOF (struct sdata), alignof (sdata));
-#   return (unaligned_size + sdata_align - 1) & ~(sdata_align - 1);
+def sdata_size(n: ptrdiff_t):
+    #   /* Reserve space for the nbytes union member even when N + 1 is less
+    #      than the size of that member.  */
+    #   ptrdiff_t unaligned_size = max (SDATA_DATA_OFFSET + n + 1,
+    #                                   sizeof (sdata));
+    #   int sdata_align = max (FLEXALIGNOF (struct sdata), alignof (sdata));
+    #   return (unaligned_size + sdata_align - 1) & ~(sdata_align - 1);
+    return n + 1
 # }
 #
 # /* Extra bytes to allocate for each string.  */
 # #define GC_STRING_EXTRA GC_STRING_OVERRUN_COOKIE_SIZE
+GC_STRING_EXTRA = GC_STRING_OVERRUN_COOKIE_SIZE
 #
 # /* Exact bound on the number of bytes in a string, not counting the
 #    terminating null.  A string cannot contain more bytes than
@@ -1688,6 +1751,7 @@ from .buffer import *
 #          - offsetof (struct sblock, data)
 #          - SDATA_DATA_OFFSET)
 #         & ~(sizeof (EMACS_INT) - 1)));
+STRING_BYTES_MAX = STRING_BYTES_BOUND
 #
 # /* Initialize string allocation.  Called from init_alloc_once.  */
 #
@@ -1872,10 +1936,13 @@ def allocate_string_data(s: Lisp_String, nchars: int, nbytes: int, clearit: bool
     #
     # if (STRING_BYTES_MAX < nbytes)
     #   string_overflow ();
+    if STRING_BYTES_MAX < nbytes:
+        string_overflow()
     #
     # /* Determine the number of bytes needed to store NBYTES bytes
     #    of string data.  */
     # ptrdiff_t needed = sdata_size (nbytes);
+    needed = sdata_size(nbytes)
     #
     # MALLOC_BLOCK_INPUT;
     #
@@ -1889,6 +1956,8 @@ def allocate_string_data(s: Lisp_String, nchars: int, nbytes: int, clearit: bool
     #endif
     #
     #     b = lisp_malloc (size + GC_STRING_EXTRA, clearit, MEM_TYPE_NON_LISP);
+    size = needed
+    data = lisp_malloc(size + GC_STRING_EXTRA, clearit, MEM_TYPE_NON_LISP)
     #
     #ifdef DOUG_LEA_MALLOC
     #     if (!mmap_lisp_allowed_p ())
@@ -1925,6 +1994,8 @@ def allocate_string_data(s: Lisp_String, nchars: int, nbytes: int, clearit: bool
     #     if (clearit)
     #       memset (SDATA_DATA (data), 0, nbytes);
     #   }
+    if clearit:
+        memset(SDATA_DATA(data), 0, 0x00, nbytes)
     #
     # data->string = s;
     # b->next_free = (sdata *) ((char *) data + needed + GC_STRING_EXTRA);
@@ -1933,7 +2004,7 @@ def allocate_string_data(s: Lisp_String, nchars: int, nbytes: int, clearit: bool
     # MALLOC_UNBLOCK_INPUT;
     #
     # s->u.s.data = SDATA_DATA (data);
-    s.u.s.data = bytearray(nbytes + 1)
+    s.u.s.data = SDATA_DATA(data)
     #ifdef GC_CHECK_STRING_BYTES
     # SDATA_NBYTES (data) = nbytes;
     #endif
@@ -3709,13 +3780,13 @@ def make_vector(length: int, init: Lisp_Object):
 # {
 #   XSYMBOL (sym)->u.s.name = name;
 # }
-def set_symbol_name(sym: Lisp_Object, name: str):
+def set_symbol_name(sym: Lisp_Object, name: Lisp_String):
     XSYMBOL(sym).u.s.name = name
 
 # void
 # init_symbol (Lisp_Object val, Lisp_Object name)
 # {
-def init_symbol(val: Lisp_Object, name: str):
+def init_symbol(val: Lisp_Object, name: Lisp_String):
     #   struct Lisp_Symbol *p = XSYMBOL (val);
     p = XSYMBOL(val)
     #   set_symbol_name (val, name);

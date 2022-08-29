@@ -92,10 +92,83 @@ class S(Singleton):
     __singletons__ = []
 
 class classproperty(object):
-    def __init__(self, f):
-        self.f = f
+    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
+        self.fget = fget
+        self.fset = fset
+        self.fdel = fdel
+        # next two lines make DynamicClassAttribute act the same as property
+        self.__doc__ = doc or fget.__doc__
+        self.overwrite_doc = doc is None
+
     def __get__(self, obj, owner):
-        return self.f(owner)
+        if self.fget is None:
+            raise AttributeError("can't get attribute")
+        return self.fget(owner)
+
+    def __set__(self, instance, value):
+        if self.fset is None:
+            raise AttributeError("can't set attribute")
+        self.fset(instance, value)
+
+    def __delete__(self, instance):
+        if self.fdel is None:
+            raise AttributeError("can't delete attribute")
+        self.fdel(instance)
+
+    def getter(self, fget):
+        fdoc = fget.__doc__ if self.overwrite_doc else None
+        result = type(self)(fget, self.fset, self.fdel, fdoc or self.__doc__)
+        result.overwrite_doc = self.overwrite_doc
+        return result
+
+    def setter(self, fset):
+        result = type(self)(self.fget, fset, self.fdel, self.__doc__)
+        result.overwrite_doc = self.overwrite_doc
+        return result
+
+    def deleter(self, fdel):
+        result = type(self)(self.fget, self.fset, fdel, self.__doc__)
+        result.overwrite_doc = self.overwrite_doc
+        return result
+
+class ClassPropertyMetaClass(type):
+    def __setattr__(self, key, value):
+        obj = self.__dict__.get(key, None)
+        if obj and type(obj) is ClassPropertyDescriptor:
+            return obj.__set__(self, value)
+        return super(ClassPropertyMetaClass, self).__setattr__(key, value)
+
+class ClassPropertyDescriptor(metaclass=ClassPropertyMetaClass):
+
+    def __init__(self, fget, fset=None):
+        self.fget = fget
+        self.fset = fset
+
+    # def __get__(self, obj, klass=None):
+    #     if klass is None:
+    #         klass = type(obj)
+    #     return self.fget.__get__(obj, klass)()
+    def __get__(self, obj, owner):
+        return self.fget(owner)
+
+    def __set__(self, obj, value):
+        if not self.fset:
+            raise AttributeError("can't set attribute")
+        type_ = type(obj)
+        return self.fset.__get__(obj, type_)(value)
+
+    def setter(self, func):
+        if not isinstance(func, (classmethod, staticmethod)):
+            func = classmethod(func)
+        self.fset = func
+        return self
+
+def classproperty(func):
+    # if not isinstance(func, (classmethod, staticmethod)):
+    #     func = classmethod(func)
+
+    return ClassPropertyDescriptor(func)
+
 
 
 # @G_

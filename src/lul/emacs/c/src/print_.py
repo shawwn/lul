@@ -1,4 +1,4 @@
-from .runtime import *
+# from .runtime import *
 
 # /* Lisp object printing and output streams.
 #
@@ -27,10 +27,10 @@ from .runtime import *
 # #include "lisp.h"
 from .lisp import *
 # #include "character.h"
+from .character import *
 # #include "coding.h"
 # #include "buffer.h"
 from .buffer import *
-from .buffer_c import *
 # #include "charset.h"
 # #include "frame.h"
 # #include "process.h"
@@ -52,6 +52,11 @@ from .buffer_c import *
 # #ifdef WINDOWSNT
 # # include <sys/socket.h> /* for F_DUPFD_CLOEXEC */
 # #endif
+#
+from .eval import *
+from .alloc import *
+from .insdel_c import *
+from .fileio_c import *
 #
 # struct terminal;
 #
@@ -103,106 +108,144 @@ from .buffer_c import *
 #    or call strout to output a block of characters.  */
 #
 # #define PRINTPREPARE                                                        \
-#    struct buffer *old = current_buffer;                                        \
-#    ptrdiff_t old_point = -1, start_point = -1;                                \
-#    ptrdiff_t old_point_byte = -1, start_point_byte = -1;                \
-#    ptrdiff_t specpdl_count = SPECPDL_INDEX ();                                \
-#    bool free_print_buffer = 0;                                                \
-#    bool multibyte                                                        \
-#      = !NILP (BVAR (current_buffer, enable_multibyte_characters));        \
-#    Lisp_Object original = printcharfun;                                        \
-#    if (NILP (printcharfun)) printcharfun = Qt;                                \
-#    if (BUFFERP (printcharfun))                                                \
-#      {                                                                        \
-#        if (XBUFFER (printcharfun) != current_buffer)                        \
-#          Fset_buffer (printcharfun);                                        \
-#        printcharfun = Qnil;                                                \
-#      }                                                                        \
-#    if (MARKERP (printcharfun))                                                \
-#      {                                                                        \
-#        ptrdiff_t marker_pos;                                                \
-#        if (! XMARKER (printcharfun)->buffer)                                \
-#          error ("Marker does not point anywhere");                        \
-#        if (XMARKER (printcharfun)->buffer != current_buffer)                \
-#          set_buffer_internal (XMARKER (printcharfun)->buffer);                \
-#        marker_pos = marker_position (printcharfun);                        \
-#        if (marker_pos < BEGV || marker_pos > ZV)                        \
-#          signal_error ("Marker is outside the accessible "                \
-#                        "part of the buffer", printcharfun);                \
-#        old_point = PT;                                                        \
-#        old_point_byte = PT_BYTE;                                        \
-#        SET_PT_BOTH (marker_pos,                                                \
-#                     marker_byte_position (printcharfun));                \
-#        start_point = PT;                                                \
-#        start_point_byte = PT_BYTE;                                        \
-#        printcharfun = Qnil;                                                \
-#      }                                                                        \
-#    if (NILP (printcharfun))                                                \
-#      {                                                                        \
-#        Lisp_Object string;                                                \
-#        if (NILP (BVAR (current_buffer, enable_multibyte_characters))        \
-#            && ! print_escape_multibyte)                                        \
-#          specbind (Qprint_escape_multibyte, Qt);                        \
-#        if (! NILP (BVAR (current_buffer, enable_multibyte_characters))        \
-#            && ! print_escape_nonascii)                                        \
-#          specbind (Qprint_escape_nonascii, Qt);                                \
-#        if (print_buffer != 0)                                                \
-#          {                                                                \
-#            string = make_string_from_bytes (print_buffer,                \
-#                                             print_buffer_pos,                \
-#                                             print_buffer_pos_byte);        \
-#            record_unwind_protect (print_unwind, string);                \
-#          }                                                                \
-#        else                                                                \
-#          {                                                                \
-#            int new_size = 1000;                                                \
-#            print_buffer = xmalloc (new_size);                                \
-#            print_buffer_size = new_size;                                \
-#            free_print_buffer = 1;                                        \
-#          }                                                                \
-#        print_buffer_pos = 0;                                                \
-#        print_buffer_pos_byte = 0;                                        \
-#      }                                                                        \
-#    if (EQ (printcharfun, Qt) && ! noninteractive)                        \
-#      setup_echo_area_for_printing (multibyte);
-def PRINTPREPARE():
-    pass
+@contextlib.contextmanager
+def PRINTPREPARE(printcharfun: Lisp_Object):
+    #    struct buffer *old = current_buffer;                                        \
+    old = G.current_buffer
+    #    ptrdiff_t old_point = -1, start_point = -1;                                \
+    old_point = -1
+    start_point = -1
+    #    ptrdiff_t old_point_byte = -1, start_point_byte = -1;                \
+    old_point_byte = -1
+    start_point_byte = -1
+    #    ptrdiff_t specpdl_count = SPECPDL_INDEX ();                                \
+    #    bool free_print_buffer = 0;                                                \
+    #    bool multibyte                                                        \
+    #      = !NILP (BVAR (current_buffer, enable_multibyte_characters));        \
+    #    Lisp_Object original = printcharfun;                                        \
+    original = printcharfun
+    #    if (NILP (printcharfun)) printcharfun = Qt;                                \
+    if NILP(printcharfun):
+        printcharfun = Q.t
+    #    if (BUFFERP (printcharfun))                                                \
+    #      {                                                                        \
+    #        if (XBUFFER (printcharfun) != current_buffer)                        \
+    #          Fset_buffer (printcharfun);                                        \
+    #        printcharfun = Qnil;                                                \
+    #      }                                                                        \
+    if BUFFERP(printcharfun):
+        if XBUFFER(printcharfun) != G.current_buffer:
+            F.set_buffer(printcharfun)
+        printcharfun = Q.nil
+    #    if (MARKERP (printcharfun))                                                \
+    #      {                                                                        \
+    if MARKERP(printcharfun):
+        raise NotImplementedError("PRINTPREPARE MARKERP")
+    #        ptrdiff_t marker_pos;                                                \
+    #        if (! XMARKER (printcharfun)->buffer)                                \
+    #          error ("Marker does not point anywhere");                        \
+    #        if (XMARKER (printcharfun)->buffer != current_buffer)                \
+    #          set_buffer_internal (XMARKER (printcharfun)->buffer);                \
+    #        marker_pos = marker_position (printcharfun);                        \
+    #        if (marker_pos < BEGV || marker_pos > ZV)                        \
+    #          signal_error ("Marker is outside the accessible "                \
+    #                        "part of the buffer", printcharfun);                \
+    #        old_point = PT;                                                        \
+    #        old_point_byte = PT_BYTE;                                        \
+    #        SET_PT_BOTH (marker_pos,                                                \
+    #                     marker_byte_position (printcharfun));                \
+    #        start_point = PT;                                                \
+    #        start_point_byte = PT_BYTE;                                        \
+    #        printcharfun = Qnil;                                                \
+    #      }                                                                        \
+    #    if (NILP (printcharfun))                                                \
+    #      {                                                                        \
+    if NILP(printcharfun):
+        # Lisp_Object string;                                                \
+        # if (NILP (BVAR (current_buffer, enable_multibyte_characters))        \
+        #     && ! print_escape_multibyte)                                        \
+        #   specbind (Qprint_escape_multibyte, Qt);                        \
+        # if (! NILP (BVAR (current_buffer, enable_multibyte_characters))        \
+        #     && ! print_escape_nonascii)                                        \
+        #   specbind (Qprint_escape_nonascii, Qt);                                \
+        # if (print_buffer != 0)                                                \
+        #   {                                                                \
+        #     string = make_string_from_bytes (print_buffer,                \
+        #                                      print_buffer_pos,                \
+        #                                      print_buffer_pos_byte);        \
+        #     record_unwind_protect (print_unwind, string);                \
+        #   }                                                                \
+        # else                                                                \
+        #   {                                                                \
+        #     int new_size = 1000;                                                \
+        #     print_buffer = xmalloc (new_size);                                \
+        new_size = 1000
+        G.print_buffer = xmalloc(new_size)
+        #     print_buffer_size = new_size;                                \
+        G.print_buffer_size = new_size
+        #     free_print_buffer = 1;                                        \
+        G.free_print_buffer = 1
+        #   }                                                                \
+        # print_buffer_pos = 0;                                                \
+        G.print_buffer_pos = 0
+        # print_buffer_pos_byte = 0;                                        \
+        G.print_buffer_pos_byte = 0
+    #      }                                                                        \
+    #    if (EQ (printcharfun, Qt) && ! noninteractive)                        \
+    #      setup_echo_area_for_printing (multibyte);
+    if EQ(printcharfun, Q.t) and not G.noninteractive:
+        setup_echo_area_for_printing(multibyte)
+    try:
+        yield printcharfun
 
-# #define PRINTFINISH                                                        \
-#    if (NILP (printcharfun))                                                \
-#      {                                                                        \
-#        if (print_buffer_pos != print_buffer_pos_byte                        \
-#            && NILP (BVAR (current_buffer, enable_multibyte_characters)))\
-#          {                                                                \
-#            USE_SAFE_ALLOCA;                                                \
-#            unsigned char *temp = SAFE_ALLOCA (print_buffer_pos + 1);        \
-#            copy_text ((unsigned char *) print_buffer, temp,                \
-#                       print_buffer_pos_byte, 1, 0);                        \
-#            insert_1_both ((char *) temp, print_buffer_pos,                \
-#                           print_buffer_pos, 0, 1, 0);                        \
-#            SAFE_FREE ();                                                \
-#          }                                                                \
-#        else                                                                \
-#          insert_1_both (print_buffer, print_buffer_pos,                        \
-#                         print_buffer_pos_byte, 0, 1, 0);                \
-#        signal_after_change (PT - print_buffer_pos, 0, print_buffer_pos);\
-#      }                                                                        \
-#    if (free_print_buffer)                                                \
-#      {                                                                        \
-#        xfree (print_buffer);                                                \
-#        print_buffer = 0;                                                \
-#      }                                                                        \
-#    unbind_to (specpdl_count, Qnil);                                        \
-#    if (MARKERP (original))                                                \
-#      set_marker_both (original, Qnil, PT, PT_BYTE);                        \
-#    if (old_point >= 0)                                                        \
-#      SET_PT_BOTH (old_point + (old_point >= start_point                        \
-#                                ? PT - start_point : 0),                        \
-#                   old_point_byte + (old_point_byte >= start_point_byte        \
-#                                     ? PT_BYTE - start_point_byte : 0));        \
-#    set_buffer_internal (old);
-def PRINTFINISH():
-    pass
+        # #define PRINTFINISH                                                        \
+        #    if (NILP (printcharfun))                                                \
+        #      {                                                                        \
+        if NILP(printcharfun):
+            # if (print_buffer_pos != print_buffer_pos_byte                        \
+            #     && NILP (BVAR (current_buffer, enable_multibyte_characters)))\
+            #   {                                                                \
+            #     USE_SAFE_ALLOCA;                                                \
+            #     unsigned char *temp = SAFE_ALLOCA (print_buffer_pos + 1);        \
+            #     copy_text ((unsigned char *) print_buffer, temp,                \
+            #                print_buffer_pos_byte, 1, 0);                        \
+            #     insert_1_both ((char *) temp, print_buffer_pos,                \
+            #                    print_buffer_pos, 0, 1, 0);                        \
+            #     SAFE_FREE ();                                                \
+            #   }                                                                \
+            # else                                                                \
+            #   insert_1_both (print_buffer, print_buffer_pos,                        \
+            #                  print_buffer_pos_byte, 0, 1, 0);                \
+            insert_1_both(G.print_buffer, G.print_buffer_pos, G.print_buffer_pos_byte, 0, 1, 0)
+            # signal_after_change (PT - print_buffer_pos, 0, print_buffer_pos);\
+            signal_after_change (G.PT - G.print_buffer_pos, 0, G.print_buffer_pos)
+        #      }                                                                        \
+        #    if (free_print_buffer)                                                \
+        #      {                                                                        \
+        if G.free_print_buffer:
+            #        xfree (print_buffer);                                                \
+            xfree(G.print_buffer)
+            #        print_buffer = 0;                                                \
+            G.print_buffer = NULL
+        #      }                                                                        \
+        #    unbind_to (specpdl_count, Qnil);                                        \
+        #    if (MARKERP (original))                                                \
+        #      set_marker_both (original, Qnil, PT, PT_BYTE);                        \
+        if MARKERP(original):
+            set_marker_both(original, Q.nil, G.PT, G.PT_BYTE)
+        #    if (old_point >= 0)                                                        \
+        if old_point >= 0:
+            #      SET_PT_BOTH (old_point + (old_point >= start_point                        \
+            #                                ? PT - start_point : 0),                        \
+            #                   old_point_byte + (old_point_byte >= start_point_byte        \
+            #                                     ? PT_BYTE - start_point_byte : 0));        \
+            SET_PT_BOTH(old_point + (G.PT - start_point
+                                     if old_point >= start_point else 0),
+                        old_point_byte + (G.PT_BYTE - start_point_byte
+                                          if old_point_byte >= start_point_byte else 0))
+        #    set_buffer_internal (old);
+    finally:
+        set_buffer_internal(old)
 #
 # /* This is used to restore the saved contents of print_buffer
 #    when there is a recursive call to print.  */
@@ -287,44 +330,49 @@ def PRINTFINISH():
 # static void
 # printchar (unsigned int ch, Lisp_Object fun)
 # {
-#   if (!NILP (fun) && !EQ (fun, Qt))
-#     call1 (fun, make_fixnum (ch));
-#   else
-#     {
-#       unsigned char str[MAX_MULTIBYTE_LENGTH];
-#       int len = CHAR_STRING (ch, str);
-#
-#       maybe_quit ();
-#
-#       if (NILP (fun))
-#         {
-#           ptrdiff_t incr = len - (print_buffer_size - print_buffer_pos_byte);
-#           if (incr > 0)
-#             print_buffer = xpalloc (print_buffer, &print_buffer_size,
-#                                     incr, -1, 1);
-#           memcpy (print_buffer + print_buffer_pos_byte, str, len);
-#           print_buffer_pos += 1;
-#           print_buffer_pos_byte += len;
-#         }
-#       else if (noninteractive)
-#         {
-#           printchar_stdout_last = ch;
-#           if (DISP_TABLE_P (Vstandard_display_table))
-#             printchar_to_stream (ch, stdout);
-#           else
-#             fwrite (str, 1, len, stdout);
-#           noninteractive_need_newline = 1;
-#         }
-#       else
-#         {
-#           bool multibyte_p
-#             = !NILP (BVAR (current_buffer, enable_multibyte_characters));
-#
-#           setup_echo_area_for_printing (multibyte_p);
-#           insert_char (ch);
-#           message_dolog ((char *) str, len, 0, multibyte_p);
-#         }
-#     }
+def printchar(ch, fun: Lisp_Object):
+    #   if (!NILP (fun) && !EQ (fun, Qt))
+    if not NILP(fun) and not EQ(fun, Q.t):
+        # call1 (fun, make_fixnum (ch));
+        call1(fun, make_fixnum(ch))
+        #   else
+        #     {
+    else:
+        raise NotImplementedError("printchar")
+        # unsigned char str[MAX_MULTIBYTE_LENGTH];
+        # int len = CHAR_STRING (ch, str);
+        #
+        # maybe_quit ();
+        #
+        # if (NILP (fun))
+        #   {
+        #     ptrdiff_t incr = len - (print_buffer_size - print_buffer_pos_byte);
+        #     if (incr > 0)
+        #       print_buffer = xpalloc (print_buffer, &print_buffer_size,
+        #                               incr, -1, 1);
+        #     memcpy (print_buffer + print_buffer_pos_byte, str, len);
+        #     print_buffer_pos += 1;
+        #     print_buffer_pos_byte += len;
+        #   }
+        # else if (noninteractive)
+        #   {
+        #     printchar_stdout_last = ch;
+        #     if (DISP_TABLE_P (Vstandard_display_table))
+        #       printchar_to_stream (ch, stdout);
+        #     else
+        #       fwrite (str, 1, len, stdout);
+        #     noninteractive_need_newline = 1;
+        #   }
+        # else
+        #   {
+        #     bool multibyte_p
+        #       = !NILP (BVAR (current_buffer, enable_multibyte_characters));
+        #
+        #     setup_echo_area_for_printing (multibyte_p);
+        #     insert_char (ch);
+        #     message_dolog ((char *) str, len, 0, multibyte_p);
+        #   }
+    #     }
 # }
 #
 # /* Output an octal escape for C.  If C is less than '\100' consult the
@@ -361,89 +409,111 @@ def PRINTFINISH():
 # strout (const char *ptr, ptrdiff_t size, ptrdiff_t size_byte,
 #         Lisp_Object printcharfun)
 # {
-def strout(ptr: str, size: int, size_byte: int, printcharfun: Lisp_Object):
-    raise NotImplementedError("strout")
-#   if (NILP (printcharfun))
-#     {
-#       ptrdiff_t incr = size_byte - (print_buffer_size - print_buffer_pos_byte);
-#       if (incr > 0)
-#         print_buffer = xpalloc (print_buffer, &print_buffer_size, incr, -1, 1);
-#       memcpy (print_buffer + print_buffer_pos_byte, ptr, size_byte);
-#       print_buffer_pos += size;
-#       print_buffer_pos_byte += size_byte;
-#     }
-#   else if (noninteractive && EQ (printcharfun, Qt))
-#     {
-#       if (DISP_TABLE_P (Vstandard_display_table))
-#         {
-#           int len;
-#           for (ptrdiff_t i = 0; i < size_byte; i += len)
-#             {
-#               int ch = string_char_and_length ((const unsigned char *) ptr + i,
-#                                                &len);
-#               printchar_to_stream (ch, stdout);
-#             }
-#         }
-#       else
-#         fwrite (ptr, 1, size_byte, stdout);
-#
-#       noninteractive_need_newline = 1;
-#     }
-#   else if (EQ (printcharfun, Qt))
-#     {
-#       /* Output to echo area.  We're trying to avoid a little overhead
-#          here, that's the reason we don't call printchar to do the
-#          job.  */
-#       int i;
-#       bool multibyte_p
-#         = !NILP (BVAR (current_buffer, enable_multibyte_characters));
-#
-#       setup_echo_area_for_printing (multibyte_p);
-#       message_dolog (ptr, size_byte, 0, multibyte_p);
-#
-#       if (size == size_byte)
-#         {
-#           for (i = 0; i < size; ++i)
-#             insert_char ((unsigned char) *ptr++);
-#         }
-#       else
-#         {
-#           int len;
-#           for (i = 0; i < size_byte; i += len)
-#             {
-#               int ch = string_char_and_length ((const unsigned char *) ptr + i,
-#                                                &len);
-#               insert_char (ch);
-#             }
-#         }
-#     }
-#   else
-#     {
-#       /* PRINTCHARFUN is a Lisp function.  */
-#       ptrdiff_t i = 0;
-#
-#       if (size == size_byte)
-#         {
-#           while (i < size_byte)
-#             {
-#               int ch = ptr[i++];
-#               printchar (ch, printcharfun);
-#             }
-#         }
-#       else
-#         {
-#           while (i < size_byte)
-#             {
-#               /* Here, we must convert each multi-byte form to the
-#                  corresponding character code before handing it to
-#                  PRINTCHAR.  */
-#               int len, ch = (string_char_and_length
-#                              ((const unsigned char *) ptr + i, &len));
-#               printchar (ch, printcharfun);
-#               i += len;
-#             }
-#         }
-#     }
+def strout(ptr: bytes, size: int, size_byte: int, printcharfun: Lisp_Object):
+    # if (NILP (printcharfun))
+    #   {
+    if NILP(printcharfun):
+        # ptrdiff_t incr = size_byte - (print_buffer_size - print_buffer_pos_byte);
+        incr = size_byte - (G.print_buffer_size - G.print_buffer_pos_byte)
+        # if (incr > 0)
+        #   print_buffer = xpalloc (print_buffer, &print_buffer_size, incr, -1, 1);
+        if incr > 0:
+            G.print_buffer, G.print_buffer_size = xpalloc(G.print_buffer, G.print_buffer_size, incr, -1, 1)
+        # memcpy (print_buffer + print_buffer_pos_byte, ptr, size_byte);
+        memcpy(G.print_buffer, G.print_buffer_pos_byte, ptr, 0, size_byte)
+        # print_buffer_pos += size;
+        G.print_buffer_pos += size
+        # print_buffer_pos_byte += size_byte;
+        G.print_buffer_pos_byte += size_byte
+        #   }
+        # else if (noninteractive && EQ (printcharfun, Qt))
+        #   {
+    elif G.noninteractive and EQ(printcharfun, Q.t):
+        #     if (DISP_TABLE_P (Vstandard_display_table))
+        #       {
+        #         int len;
+        #         for (ptrdiff_t i = 0; i < size_byte; i += len)
+        #           {
+        #             int ch = string_char_and_length ((const unsigned char *) ptr + i,
+        #                                              &len);
+        #             printchar_to_stream (ch, stdout);
+        #           }
+        #       }
+        #     else
+        #       fwrite (ptr, 1, size_byte, stdout);
+        #
+        #     noninteractive_need_newline = 1;
+        raise NotImplementedError("strout G.noninteractive")
+        #   }
+        # else if (EQ (printcharfun, Qt))
+        #   {
+    elif EQ(printcharfun, Q.t):
+        #     /* Output to echo area.  We're trying to avoid a little overhead
+        #        here, that's the reason we don't call printchar to do the
+        #        job.  */
+        #     int i;
+        #     bool multibyte_p
+        #       = !NILP (BVAR (current_buffer, enable_multibyte_characters));
+        #
+        #     setup_echo_area_for_printing (multibyte_p);
+        #     message_dolog (ptr, size_byte, 0, multibyte_p);
+        #
+        #     if (size == size_byte)
+        #       {
+        #         for (i = 0; i < size; ++i)
+        #           insert_char ((unsigned char) *ptr++);
+        #       }
+        #     else
+        #       {
+        #         int len;
+        #         for (i = 0; i < size_byte; i += len)
+        #           {
+        #             int ch = string_char_and_length ((const unsigned char *) ptr + i,
+        #                                              &len);
+        #             insert_char (ch);
+        #           }
+        #       }
+        raise NotImplementedError("strout EQ(printcharfun, Q.t)")
+        #   }
+        # else
+        #   {
+    else:
+        # /* PRINTCHARFUN is a Lisp function.  */
+        # ptrdiff_t i = 0;
+        i = 0
+        #
+        # if (size == size_byte)
+        #   {
+        if size == size_byte:
+            # while (i < size_byte)
+            #   {
+            while i < size_byte:
+                # int ch = ptr[i++];
+                ch = ptr[i]
+                i += 1
+                # printchar (ch, printcharfun);
+                printchar(ch, printcharfun)
+            #   }
+            #   }
+            # else
+            #   {
+        else:
+            # while (i < size_byte)
+            #   {
+            while i < size_byte:
+                # /* Here, we must convert each multi-byte form to the
+                #    corresponding character code before handing it to
+                #    PRINTCHAR.  */
+                # int len, ch = (string_char_and_length
+                #                ((const unsigned char *) ptr + i, &len));
+                len, ch = string_char_and_length(ptr[i:], len)
+                # printchar (ch, printcharfun);
+                printchar(ch, printcharfun)
+                # i += len;
+                i += len
+            #   }
+        #   }
+    #   }
 # }
 #
 # /* Print the contents of a string STRING using PRINTCHARFUN.
@@ -551,7 +621,7 @@ def strout(ptr: str, size: int, size_byte: int, printcharfun: Lisp_Object):
 #   ptrdiff_t len = strlen (string);
 #   strout (string, len, len, printcharfun);
 # }
-def print_c_string(string: str, printcharfun: Lisp_Object):
+def print_c_string(string: bytes, printcharfun: Lisp_Object):
     len = strlen(string)
     strout(string, len, len, printcharfun)
 
@@ -565,10 +635,9 @@ def print_c_string(string: str, printcharfun: Lisp_Object):
 #   print_c_string (data, printcharfun);
 #   PRINTFINISH;
 # }
-def write_string(data: str, printcharfun: Lisp_Object):
-    PRINTPREPARE()
-    print_c_string(data, printcharfun)
-    PRINTFINISH()
+def write_string(data: bytes, printcharfun: Lisp_Object):
+    with PRINTPREPARE(printcharfun) as printcharfun:
+        print_c_string(data, printcharfun)
 #
 #
 # void
@@ -609,67 +678,77 @@ def write_string(data: str, printcharfun: Lisp_Object):
 # static void print_preprocess_string (INTERVAL, void *);
 # static void print_object (Lisp_Object, Lisp_Object, bool);
 #
-# DEFUN ("terpri", Fterpri, Sterpri, 0, 2, 0,
-#        doc: /* Output a newline to stream PRINTCHARFUN.
-# If ENSURE is non-nil only output a newline if not already at the
-# beginning of a line.  Value is non-nil if a newline is printed.
-# If PRINTCHARFUN is omitted or nil, the value of `standard-output' is used.  */)
-#   (Lisp_Object printcharfun, Lisp_Object ensure)
-# {
-#   Lisp_Object val;
-#
-#   if (NILP (printcharfun))
-#     printcharfun = Vstandard_output;
-#   PRINTPREPARE;
-#
-#   if (NILP (ensure))
-#     val = Qt;
-#   /* Difficult to check if at line beginning so abort.  */
-#   else if (FUNCTIONP (printcharfun))
-#     signal_error ("Unsupported function argument", printcharfun);
-#   else if (noninteractive && !NILP (printcharfun))
-#     val = printchar_stdout_last == 10 ? Qnil : Qt;
-#   else
-#     val = NILP (Fbolp ()) ? Qt : Qnil;
-#
-#   if (!NILP (val))
-#     printchar ('\n', printcharfun);
-#   PRINTFINISH;
-#   return val;
-# }
-#
-# DEFUN ("prin1", Fprin1, Sprin1, 1, 2, 0,
-#        doc: /* Output the printed representation of OBJECT, any Lisp object.
-# Quoting characters are printed when needed to make output that `read'
-# can handle, whenever this is possible.  For complex objects, the behavior
-# is controlled by `print-level' and `print-length', which see.
-#
-# OBJECT is any of the Lisp data types: a number, a string, a symbol,
-# a list, a buffer, a window, a frame, etc.
-#
-# A printed representation of an object is text which describes that object.
-#
-# Optional argument PRINTCHARFUN is the output stream, which can be one
-# of these:
-#
-#    - a buffer, in which case output is inserted into that buffer at point;
-#    - a marker, in which case output is inserted at marker's position;
-#    - a function, in which case that function is called once for each
-#      character of OBJECT's printed representation;
-#    - a symbol, in which case that symbol's function definition is called; or
-#    - t, in which case the output is displayed in the echo area.
-#
-# If PRINTCHARFUN is omitted, the value of `standard-output' (which see)
-# is used instead.  */)
-#   (Lisp_Object object, Lisp_Object printcharfun)
-# {
-#   if (NILP (printcharfun))
-#     printcharfun = Vstandard_output;
-#   PRINTPREPARE;
-#   print (object, printcharfun, 1);
-#   PRINTFINISH;
-#   return object;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("terpri", Fterpri, Sterpri, 0, 2, 0,
+    #        doc: /* Output a newline to stream PRINTCHARFUN.
+    # If ENSURE is non-nil only output a newline if not already at the
+    # beginning of a line.  Value is non-nil if a newline is printed.
+    # If PRINTCHARFUN is omitted or nil, the value of `standard-output' is used.  */)
+    #   (Lisp_Object printcharfun, Lisp_Object ensure)
+    # {
+    #   Lisp_Object val;
+    #
+    #   if (NILP (printcharfun))
+    #     printcharfun = Vstandard_output;
+    #   PRINTPREPARE;
+    #
+    #   if (NILP (ensure))
+    #     val = Qt;
+    #   /* Difficult to check if at line beginning so abort.  */
+    #   else if (FUNCTIONP (printcharfun))
+    #     signal_error ("Unsupported function argument", printcharfun);
+    #   else if (noninteractive && !NILP (printcharfun))
+    #     val = printchar_stdout_last == 10 ? Qnil : Qt;
+    #   else
+    #     val = NILP (Fbolp ()) ? Qt : Qnil;
+    #
+    #   if (!NILP (val))
+    #     printchar ('\n', printcharfun);
+    #   PRINTFINISH;
+    #   return val;
+    # }
+    #
+    # DEFUN ("prin1", Fprin1, Sprin1, 1, 2, 0,
+    #        doc: /* Output the printed representation of OBJECT, any Lisp object.
+    # Quoting characters are printed when needed to make output that `read'
+    # can handle, whenever this is possible.  For complex objects, the behavior
+    # is controlled by `print-level' and `print-length', which see.
+    #
+    # OBJECT is any of the Lisp data types: a number, a string, a symbol,
+    # a list, a buffer, a window, a frame, etc.
+    #
+    # A printed representation of an object is text which describes that object.
+    #
+    # Optional argument PRINTCHARFUN is the output stream, which can be one
+    # of these:
+    #
+    #    - a buffer, in which case output is inserted into that buffer at point;
+    #    - a marker, in which case output is inserted at marker's position;
+    #    - a function, in which case that function is called once for each
+    #      character of OBJECT's printed representation;
+    #    - a symbol, in which case that symbol's function definition is called; or
+    #    - t, in which case the output is displayed in the echo area.
+    #
+    # If PRINTCHARFUN is omitted, the value of `standard-output' (which see)
+    # is used instead.  */)
+    #   (Lisp_Object object, Lisp_Object printcharfun)
+    # {
+    @DEFUN("prin1", S.prin1, 1, 2, 0)
+    @staticmethod
+    def prin1(object: Lisp_Object, printcharfun: Lisp_Object = Q.nil):
+        # if (NILP (printcharfun))
+        #   printcharfun = Vstandard_output;
+        if NILP(printcharfun):
+            printcharfun = V.standard_output
+        # PRINTPREPARE;
+        # print (object, printcharfun, 1);
+        # PRINTFINISH;
+        with PRINTPREPARE(printcharfun) as printcharfun:
+            print_(object, printcharfun, 1)
+        # return object;
+        return object
+    # }
 #
 @mixin(V)
 class V:
@@ -928,13 +1007,15 @@ class F:
         #
         #   set_buffer_internal (XBUFFER (Vprin1_to_string_buffer));
         set_buffer_internal (XBUFFER (V.prin1_to_string_buffer))
-        #   value = Fbuffer_string ();
-        value = F.buffer_string()
-        #
-        #   Ferase_buffer ();
-        F.erase_buffer()
-        #   set_buffer_internal (old);
-        set_buffer_internal(old)
+        try:
+            #   value = Fbuffer_string ();
+            value = F.buffer_string()
+            #
+            #   Ferase_buffer ();
+            F.erase_buffer()
+        finally:
+            #   set_buffer_internal (old);
+            set_buffer_internal(old)
         #
         #   return value;
         return value
@@ -972,57 +1053,93 @@ def print_error_message(data: Lisp_Object, stream: Lisp_Object, context: Optiona
     #   }
     #
     # errname = Fcar (data);
+    errname = F.car(data)
     #
     # if (EQ (errname, Qerror))
     #   {
-    #     data = Fcdr (data);
-    #     if (!CONSP (data))
-    #       data = Qnil;
-    #     errmsg = Fcar (data);
-    #     file_error = Qnil;
-    #   }
-    # else
-    #   {
-    #     Lisp_Object error_conditions = Fget (errname, Qerror_conditions);
-    #     errmsg = Fget (errname, Qerror_message);
-    #     /* During loadup 'substitute-command-keys' might not be available.  */
-    #     if (!NILP (Ffboundp (Qsubstitute_command_keys)))
-    #       errmsg = call1 (Qsubstitute_command_keys, errmsg);
-    #
-    #     file_error = Fmemq (Qfile_error, error_conditions);
+    if EQ(errname, Q.error):
+        # data = Fcdr (data);
+        data = F.cdr(data)
+        # if (!CONSP (data))
+        #   data = Qnil;
+        if not CONSP(data):
+            data = Q.nil
+        # errmsg = Fcar (data);
+        errmsg = F.car(data)
+        # file_error = Qnil;
+        file_error = Q.nil
+        #   }
+        # else
+        #   {
+    else:
+        # Lisp_Object error_conditions = Fget (errname, Qerror_conditions);
+        error_conditions = F.get(errname, Q.error_conditions)
+        # errmsg = Fget (errname, Qerror_message);
+        errmsg = F.get(errname, Q.error_message)
+        # /* During loadup 'substitute-command-keys' might not be available.  */
+        # if (!NILP (Ffboundp (Qsubstitute_command_keys)))
+        #   errmsg = call1 (Qsubstitute_command_keys, errmsg);
+        print("TODO: During loadup 'substitute-command-keys' might not be available.")
+        # if not NILP(F.fboundp, Q.substitute_command_keys):
+        #     errmsg = call1(Q.substitute_command_keys, errmsg)
+        #
+        # file_error = Fmemq (Qfile_error, error_conditions);
+        file_error = F.memq(Q.file_error, error_conditions)
     #   }
     #
     # /* Print an error message including the data items.  */
     #
     # tail = Fcdr_safe (data);
+    tail = F.cdr_safe(data)
     #
     # /* For file-error, make error message by concatenating
     #    all the data items.  They are all strings.  */
     # if (!NILP (file_error) && CONSP (tail))
     #   errmsg = XCAR (tail), tail = XCDR (tail);
+    if not NILP(file_error) and CONSP(tail):
+        errmsg = XCAR(tail)
+        tail = XCDR(tail)
     #
     # {
-    #   const char *sep = ": ";
-    #
-    #   if (!STRINGP (errmsg))
-    #     write_string ("peculiar error", stream);
-    #   else if (SCHARS (errmsg))
-    #     Fprinc (errmsg, stream);
-    #   else
-    #     sep = NULL;
-    #
-    #   FOR_EACH_TAIL (tail)
-    #     {
-    #       if (sep)
-    #         write_string (sep, stream);
-    #       sep = ", ";
-    #       Lisp_Object obj = XCAR (tail);
-    #       if (!NILP (file_error)
-    #           || EQ (errname, Qend_of_file) || EQ (errname, Quser_error))
-    #         Fprinc (obj, stream);
-    #       else
-    #         Fprin1 (obj, stream);
-    #     }
+    if True:
+        # const char *sep = ": ";
+        sep = b": "
+        #
+        # if (!STRINGP (errmsg))
+        #   write_string ("peculiar error", stream);
+        if not STRINGP(errmsg):
+            write_string(b"peculiar error", stream)
+            # else if (SCHARS (errmsg))
+        elif SCHARS(errmsg):
+            # Fprinc (errmsg, stream);
+            F.princ(errmsg, stream)
+            # else
+        else:
+            # sep = NULL;
+            sep = NULL
+        #
+        # FOR_EACH_TAIL (tail)
+        #   {
+        for tail, set_tail in FOR_EACH_TAIL(tail):
+            # if (sep)
+            #   write_string (sep, stream);
+            if sep:
+                write_string(sep, stream)
+            # sep = ", ";
+            sep = ", "
+            # Lisp_Object obj = XCAR (tail);
+            obj = XCAR(tail)
+            # if (!NILP (file_error)
+            #     || EQ (errname, Qend_of_file) || EQ (errname, Quser_error))
+            if not NILP(file_error) \
+                or EQ(errname, Q.end_of_file) or EQ(errname, Q.user_error):
+                # Fprinc (obj, stream);
+                F.princ(obj, stream)
+                # else
+            else:
+                # Fprin1 (obj, stream);
+                F.prin1(obj, stream)
+        #   }
     # }
 # }
 #
@@ -1151,45 +1268,49 @@ def print_error_message(data: Lisp_Object, stream: Lisp_Object, context: Optiona
 # static void
 # print (Lisp_Object obj, Lisp_Object printcharfun, bool escapeflag)
 # {
-#   new_backquote_output = 0;
-#
-#   /* Reset print_number_index and Vprint_number_table only when
-#      the variable Vprint_continuous_numbering is nil.  Otherwise,
-#      the values of these variables will be kept between several
-#      print functions.  */
-#   if (NILP (Vprint_continuous_numbering)
-#       || NILP (Vprint_number_table))
-#     {
-#       print_number_index = 0;
-#       Vprint_number_table = Qnil;
-#     }
-#
-#   /* Construct Vprint_number_table for print-circle.  */
-#   if (!NILP (Vprint_circle))
-#     {
-#       /* Construct Vprint_number_table.
-#          This increments print_number_index for the objects added.  */
-#       print_depth = 0;
-#       print_preprocess (obj);
-#
-#       if (HASH_TABLE_P (Vprint_number_table))
-#         { /* Remove unnecessary objects, which appear only once in OBJ;
-#              that is, whose status is Qt.  */
-#           struct Lisp_Hash_Table *h = XHASH_TABLE (Vprint_number_table);
-#           ptrdiff_t i;
-#
-#           for (i = 0; i < HASH_TABLE_SIZE (h); ++i)
-#             {
-#               Lisp_Object key =  HASH_KEY (h, i);
-#               if (!EQ (key, Qunbound)
-#                   && EQ (HASH_VALUE (h, i), Qt))
-#                 Fremhash (key, Vprint_number_table);
-#             }
-#         }
-#     }
-#
-#   print_depth = 0;
-#   print_object (obj, printcharfun, escapeflag);
+def print_(obj: Lisp_Object, printcharfun: Lisp_Object, escapeflag: bool_t):
+    print("TODO: print_")
+    breakpoint()
+    # new_backquote_output = 0;
+    G.new_backquote_output = 0
+    #
+    # /* Reset print_number_index and Vprint_number_table only when
+    #    the variable Vprint_continuous_numbering is nil.  Otherwise,
+    #    the values of these variables will be kept between several
+    #    print functions.  */
+    # if (NILP (Vprint_continuous_numbering)
+    #     || NILP (Vprint_number_table))
+    #   {
+    #     print_number_index = 0;
+    #     Vprint_number_table = Qnil;
+    #   }
+    #
+    # /* Construct Vprint_number_table for print-circle.  */
+    # if (!NILP (Vprint_circle))
+    #   {
+    #     /* Construct Vprint_number_table.
+    #        This increments print_number_index for the objects added.  */
+    #     print_depth = 0;
+    #     print_preprocess (obj);
+    #
+    #     if (HASH_TABLE_P (Vprint_number_table))
+    #       { /* Remove unnecessary objects, which appear only once in OBJ;
+    #            that is, whose status is Qt.  */
+    #         struct Lisp_Hash_Table *h = XHASH_TABLE (Vprint_number_table);
+    #         ptrdiff_t i;
+    #
+    #         for (i = 0; i < HASH_TABLE_SIZE (h); ++i)
+    #           {
+    #             Lisp_Object key =  HASH_KEY (h, i);
+    #             if (!EQ (key, Qunbound)
+    #                 && EQ (HASH_VALUE (h, i), Qt))
+    #               Fremhash (key, Vprint_number_table);
+    #           }
+    #       }
+    #   }
+    #
+    # print_depth = 0;
+    # print_object (obj, printcharfun, escapeflag);
 # }
 #
 # #define PRINT_CIRCLE_CANDIDATE_P(obj)                           \
@@ -2349,157 +2470,181 @@ def print_error_message(data: Lisp_Object, stream: Lisp_Object, context: Optiona
 #
 #   defsubr (&Sexternal_debugging_output);
 # }
-#
+
+@mixin(Q)
+class Q:
+    standard_output = build_lisp_symbol("standard-output")
+
 # void
 # syms_of_print (void)
 # {
-#   DEFSYM (Qtemp_buffer_setup_hook, "temp-buffer-setup-hook");
-#
-#   DEFVAR_LISP ("standard-output", Vstandard_output,
-#                doc: /* Output stream `print' uses by default for outputting a character.
-# This may be any function of one argument.
-# It may also be a buffer (output is inserted before point)
-# or a marker (output is inserted and the marker is advanced)
-# or the symbol t (output appears in the echo area).  */);
-#   Vstandard_output = Qt;
-#   DEFSYM (Qstandard_output, "standard-output");
-#
-#   DEFVAR_LISP ("float-output-format", Vfloat_output_format,
-#                doc: /* The format descriptor string used to print floats.
-# This is a %-spec like those accepted by `printf' in C,
-# but with some restrictions.  It must start with the two characters `%.'.
-# After that comes an integer precision specification,
-# and then a letter which controls the format.
-# The letters allowed are `e', `f' and `g'.
-# Use `e' for exponential notation \"DIG.DIGITSeEXPT\"
-# Use `f' for decimal point notation \"DIGITS.DIGITS\".
-# Use `g' to choose the shorter of those two formats for the number at hand.
-# The precision in any of these cases is the number of digits following
-# the decimal point.  With `f', a precision of 0 means to omit the
-# decimal point.  0 is not allowed with `e' or `g'.
-#
-# A value of nil means to use the shortest notation
-# that represents the number without losing information.  */);
-#   Vfloat_output_format = Qnil;
-#
-#   DEFVAR_BOOL ("print-integers-as-characters", print_integers_as_characters,
-#                doc: /* Non-nil means integers are printed using characters syntax.
-# Only independent graphic characters, and control characters with named
-# escape sequences such as newline, are printed this way.  Other
-# integers, including those corresponding to raw bytes, are printed
-# as numbers the usual way.  */);
-#   print_integers_as_characters = false;
-#
-#   DEFVAR_LISP ("print-length", Vprint_length,
-#                doc: /* Maximum length of list to print before abbreviating.
-# A value of nil means no limit.  See also `eval-expression-print-length'.  */);
-#   Vprint_length = Qnil;
-#
-#   DEFVAR_LISP ("print-level", Vprint_level,
-#                doc: /* Maximum depth of list nesting to print before abbreviating.
-# A value of nil means no limit.  See also `eval-expression-print-level'.  */);
-#   Vprint_level = Qnil;
-#
-#   DEFVAR_BOOL ("print-escape-newlines", print_escape_newlines,
-#                doc: /* Non-nil means print newlines in strings as `\\n'.
-# Also print formfeeds as `\\f'.  */);
-#   print_escape_newlines = 0;
-#
-#   DEFVAR_BOOL ("print-escape-control-characters", print_escape_control_characters,
-#                doc: /* Non-nil means print control characters in strings as `\\OOO'.
-# \(OOO is the octal representation of the character code.)*/);
-#   print_escape_control_characters = 0;
-#
-#   DEFVAR_BOOL ("print-escape-nonascii", print_escape_nonascii,
-#                doc: /* Non-nil means print unibyte non-ASCII chars in strings as \\OOO.
-# \(OOO is the octal representation of the character code.)
-# Only single-byte characters are affected, and only in `prin1'.
-# When the output goes in a multibyte buffer, this feature is
-# enabled regardless of the value of the variable.  */);
-#   print_escape_nonascii = 0;
-#
-#   DEFVAR_BOOL ("print-escape-multibyte", print_escape_multibyte,
-#                doc: /* Non-nil means print multibyte characters in strings as \\xXXXX.
-# \(XXXX is the hex representation of the character code.)
-# This affects only `prin1'.  */);
-#   print_escape_multibyte = 0;
-#
-#   DEFVAR_BOOL ("print-quoted", print_quoted,
-#                doc: /* Non-nil means print quoted forms with reader syntax.
-# I.e., (quote foo) prints as \\='foo, (function foo) as #\\='foo.  */);
-#   print_quoted = true;
-#
-#   DEFVAR_LISP ("print-gensym", Vprint_gensym,
-#                doc: /* Non-nil means print uninterned symbols so they will read as uninterned.
-# I.e., the value of (make-symbol \"foobar\") prints as #:foobar.
-# When the uninterned symbol appears multiple times within the printed
-# expression, and `print-circle' is non-nil, in addition use the #N#
-# and #N= constructs as needed, so that multiple references to the same
-# symbol are shared once again when the text is read back.  */);
-#   Vprint_gensym = Qnil;
-#
-#   DEFVAR_LISP ("print-circle", Vprint_circle,
-#                doc: /* Non-nil means print recursive structures using #N= and #N# syntax.
-# If nil, printing proceeds recursively and may lead to
-# `max-lisp-eval-depth' being exceeded or an error may occur:
-# \"Apparently circular structure being printed.\"  Also see
-# `print-length' and `print-level'.
-# If non-nil, shared substructures anywhere in the structure are printed
-# with `#N=' before the first occurrence (in the order of the print
-# representation) and `#N#' in place of each subsequent occurrence,
-# where N is a positive decimal integer.  */);
-#   Vprint_circle = Qnil;
-#
-#   DEFVAR_LISP ("print-continuous-numbering", Vprint_continuous_numbering,
-#                doc: /* Non-nil means number continuously across print calls.
-# This affects the numbers printed for #N= labels and #M# references.
-# See also `print-circle', `print-gensym', and `print-number-table'.
-# This variable should not be set with `setq'; bind it with a `let' instead.  */);
-#   Vprint_continuous_numbering = Qnil;
-#
-#   DEFVAR_LISP ("print-number-table", Vprint_number_table,
-#                doc: /* A vector used internally to produce `#N=' labels and `#N#' references.
-# The Lisp printer uses this vector to detect Lisp objects referenced more
-# than once.
-#
-# When you bind `print-continuous-numbering' to t, you should probably
-# also bind `print-number-table' to nil.  This ensures that the value of
-# `print-number-table' can be garbage-collected once the printing is
-# done.  If all elements of `print-number-table' are nil, it means that
-# the printing done so far has not found any shared structure or objects
-# that need to be recorded in the table.  */);
-#   Vprint_number_table = Qnil;
-#
-#   DEFVAR_LISP ("print-charset-text-property", Vprint_charset_text_property,
-#                doc: /* A flag to control printing of `charset' text property on printing a string.
-# The value should be nil, t, or `default'.
-#
-# If the value is nil, don't print the text property `charset'.
-#
-# If the value is t, always print the text property `charset'.
-#
-# If the value is `default', print the text property `charset' only when
-# the value is different from what is guessed in the current charset
-# priorities.  Values other than nil or t are also treated as
-# `default'.  */);
-#   Vprint_charset_text_property = Qdefault;
-#
-#   /* prin1_to_string_buffer initialized in init_buffer_once in buffer.c */
-#   staticpro (&Vprin1_to_string_buffer);
-#
-#   defsubr (&Sprin1);
-#   defsubr (&Sprin1_to_string);
-#   defsubr (&Serror_message_string);
-#   defsubr (&Sprinc);
-#   defsubr (&Sprint);
-#   defsubr (&Sterpri);
-#   defsubr (&Swrite_char);
-#   defsubr (&Sredirect_debugging_output);
-#   defsubr (&Sprint_preprocess);
-#
-#   DEFSYM (Qprint_escape_multibyte, "print-escape-multibyte");
-#   DEFSYM (Qprint_escape_nonascii, "print-escape-nonascii");
-#
-#   print_prune_charset_plist = Qnil;
-#   staticpro (&print_prune_charset_plist);
+def syms_of_print():
+    #   DEFSYM (Qtemp_buffer_setup_hook, "temp-buffer-setup-hook");
+    #
+    #   DEFVAR_LISP ("standard-output", Vstandard_output,
+    #                doc: /* Output stream `print' uses by default for outputting a character.
+    # This may be any function of one argument.
+    # It may also be a buffer (output is inserted before point)
+    # or a marker (output is inserted and the marker is advanced)
+    # or the symbol t (output appears in the echo area).  */);
+    #   Vstandard_output = Qt;
+    V.standard_output = Q.t
+    #   DEFSYM (Qstandard_output, "standard-output");
+    DEFSYM(Q.standard_output, "standard-output")
+    #
+    #   DEFVAR_LISP ("float-output-format", Vfloat_output_format,
+    #                doc: /* The format descriptor string used to print floats.
+    # This is a %-spec like those accepted by `printf' in C,
+    # but with some restrictions.  It must start with the two characters `%.'.
+    # After that comes an integer precision specification,
+    # and then a letter which controls the format.
+    # The letters allowed are `e', `f' and `g'.
+    # Use `e' for exponential notation \"DIG.DIGITSeEXPT\"
+    # Use `f' for decimal point notation \"DIGITS.DIGITS\".
+    # Use `g' to choose the shorter of those two formats for the number at hand.
+    # The precision in any of these cases is the number of digits following
+    # the decimal point.  With `f', a precision of 0 means to omit the
+    # decimal point.  0 is not allowed with `e' or `g'.
+    #
+    # A value of nil means to use the shortest notation
+    # that represents the number without losing information.  */);
+    #   Vfloat_output_format = Qnil;
+    V.float_output_format = Q.nil
+    #
+    #   DEFVAR_BOOL ("print-integers-as-characters", print_integers_as_characters,
+    #                doc: /* Non-nil means integers are printed using characters syntax.
+    # Only independent graphic characters, and control characters with named
+    # escape sequences such as newline, are printed this way.  Other
+    # integers, including those corresponding to raw bytes, are printed
+    # as numbers the usual way.  */);
+    #   print_integers_as_characters = false;
+    #
+    #   DEFVAR_LISP ("print-length", Vprint_length,
+    #                doc: /* Maximum length of list to print before abbreviating.
+    # A value of nil means no limit.  See also `eval-expression-print-length'.  */);
+    #   Vprint_length = Qnil;
+    V.print_length = Q.nil
+    #
+    #   DEFVAR_LISP ("print-level", Vprint_level,
+    #                doc: /* Maximum depth of list nesting to print before abbreviating.
+    # A value of nil means no limit.  See also `eval-expression-print-level'.  */);
+    #   Vprint_level = Qnil;
+    V.print_level = Q.nil
+    #
+    #   DEFVAR_BOOL ("print-escape-newlines", print_escape_newlines,
+    #                doc: /* Non-nil means print newlines in strings as `\\n'.
+    # Also print formfeeds as `\\f'.  */);
+    #   print_escape_newlines = 0;
+    #
+    #   DEFVAR_BOOL ("print-escape-control-characters", print_escape_control_characters,
+    #                doc: /* Non-nil means print control characters in strings as `\\OOO'.
+    # \(OOO is the octal representation of the character code.)*/);
+    #   print_escape_control_characters = 0;
+    #
+    #   DEFVAR_BOOL ("print-escape-nonascii", print_escape_nonascii,
+    #                doc: /* Non-nil means print unibyte non-ASCII chars in strings as \\OOO.
+    # \(OOO is the octal representation of the character code.)
+    # Only single-byte characters are affected, and only in `prin1'.
+    # When the output goes in a multibyte buffer, this feature is
+    # enabled regardless of the value of the variable.  */);
+    #   print_escape_nonascii = 0;
+    #
+    #   DEFVAR_BOOL ("print-escape-multibyte", print_escape_multibyte,
+    #                doc: /* Non-nil means print multibyte characters in strings as \\xXXXX.
+    # \(XXXX is the hex representation of the character code.)
+    # This affects only `prin1'.  */);
+    #   print_escape_multibyte = 0;
+    #
+    #   DEFVAR_BOOL ("print-quoted", print_quoted,
+    #                doc: /* Non-nil means print quoted forms with reader syntax.
+    # I.e., (quote foo) prints as \\='foo, (function foo) as #\\='foo.  */);
+    #   print_quoted = true;
+    #
+    #   DEFVAR_LISP ("print-gensym", Vprint_gensym,
+    #                doc: /* Non-nil means print uninterned symbols so they will read as uninterned.
+    # I.e., the value of (make-symbol \"foobar\") prints as #:foobar.
+    # When the uninterned symbol appears multiple times within the printed
+    # expression, and `print-circle' is non-nil, in addition use the #N#
+    # and #N= constructs as needed, so that multiple references to the same
+    # symbol are shared once again when the text is read back.  */);
+    #   Vprint_gensym = Qnil;
+    V.print_gensym = Q.nil
+    #
+    #   DEFVAR_LISP ("print-circle", Vprint_circle,
+    #                doc: /* Non-nil means print recursive structures using #N= and #N# syntax.
+    # If nil, printing proceeds recursively and may lead to
+    # `max-lisp-eval-depth' being exceeded or an error may occur:
+    # \"Apparently circular structure being printed.\"  Also see
+    # `print-length' and `print-level'.
+    # If non-nil, shared substructures anywhere in the structure are printed
+    # with `#N=' before the first occurrence (in the order of the print
+    # representation) and `#N#' in place of each subsequent occurrence,
+    # where N is a positive decimal integer.  */);
+    #   Vprint_circle = Qnil;
+    V.print_circle = Q.nil
+    #
+    #   DEFVAR_LISP ("print-continuous-numbering", Vprint_continuous_numbering,
+    #                doc: /* Non-nil means number continuously across print calls.
+    # This affects the numbers printed for #N= labels and #M# references.
+    # See also `print-circle', `print-gensym', and `print-number-table'.
+    # This variable should not be set with `setq'; bind it with a `let' instead.  */);
+    #   Vprint_continuous_numbering = Qnil;
+    V.print_continuous_numbering = Q.nil
+    #
+    #   DEFVAR_LISP ("print-number-table", Vprint_number_table,
+    #                doc: /* A vector used internally to produce `#N=' labels and `#N#' references.
+    # The Lisp printer uses this vector to detect Lisp objects referenced more
+    # than once.
+    #
+    # When you bind `print-continuous-numbering' to t, you should probably
+    # also bind `print-number-table' to nil.  This ensures that the value of
+    # `print-number-table' can be garbage-collected once the printing is
+    # done.  If all elements of `print-number-table' are nil, it means that
+    # the printing done so far has not found any shared structure or objects
+    # that need to be recorded in the table.  */);
+    #   Vprint_number_table = Qnil;
+    V.print_number_table = Q.nil
+    #
+    #   DEFVAR_LISP ("print-charset-text-property", Vprint_charset_text_property,
+    #                doc: /* A flag to control printing of `charset' text property on printing a string.
+    # The value should be nil, t, or `default'.
+    #
+    # If the value is nil, don't print the text property `charset'.
+    #
+    # If the value is t, always print the text property `charset'.
+    #
+    # If the value is `default', print the text property `charset' only when
+    # the value is different from what is guessed in the current charset
+    # priorities.  Values other than nil or t are also treated as
+    # `default'.  */);
+    #   Vprint_charset_text_property = Qdefault;
+    V.print_charset_text_property = Q.default
+    #
+    #   /* prin1_to_string_buffer initialized in init_buffer_once in buffer.c */
+    #   staticpro (&Vprin1_to_string_buffer);
+    #
+    #   defsubr (&Sprin1);
+    defsubr(S.prin1)
+    #   defsubr (&Sprin1_to_string);
+    defsubr(S.prin1_to_string)
+    #   defsubr (&Serror_message_string);
+    defsubr(S.error_message_string)
+    #   defsubr (&Sprinc);
+    defsubr(S.princ)
+    #   defsubr (&Sprint);
+    defsubr(S.print)
+    #   defsubr (&Sterpri);
+    defsubr(S.terpri)
+    #   defsubr (&Swrite_char);
+    defsubr(S.write_char)
+    #   defsubr (&Sredirect_debugging_output);
+    defsubr(S.redirect_debugging_output)
+    #   defsubr (&Sprint_preprocess);
+    defsubr(S.print_preprocess)
+    #
+    #   DEFSYM (Qprint_escape_multibyte, "print-escape-multibyte");
+    #   DEFSYM (Qprint_escape_nonascii, "print-escape-nonascii");
+    #
+    #   print_prune_charset_plist = Qnil;
+    #   staticpro (&print_prune_charset_plist);
 # }

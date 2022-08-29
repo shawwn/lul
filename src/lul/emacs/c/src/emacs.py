@@ -1,4 +1,4 @@
-from .runtime import *
+# from .runtime import *
 
 
 # /* Fully extensible Emacs, running on Unix, intended for GNU.
@@ -87,8 +87,11 @@ from .lisp import *
 #
 # #include "bignum.h"
 # #include "intervals.h"
+from .intervals_c import *
 # #include "character.h"
+from .character import *
 # #include "buffer.h"
+from .buffer import *
 # #include "window.h"
 # #include "xwidget.h"
 # #include "atimer.h"
@@ -98,6 +101,7 @@ from .lisp import *
 # #include "frame.h"
 # #include "termhooks.h"
 # #include "keyboard.h"
+from .keyboard import *
 # #include "keymap.h"
 # #include "category.h"
 # #include "charset.h"
@@ -109,9 +113,15 @@ from .lisp import *
 # #include "sysselect.h"
 # #include "systime.h"
 # #include "puresize.h"
+from .puresize import *
 #
 # #include "getpagesize.h"
 # #include "gnutls.h"
+#
+from .buffer_c import *
+from .xfaces_c import *
+from .print_ import *
+from .fileio_c import *
 #
 # #ifdef HAVE_HAIKU
 # #include <kernel/OS.h>
@@ -1633,6 +1643,7 @@ def main(argc: int, argv: List[str]):
     #
     #   /* Handle the -batch switch, which means don't do interactive display.  */
     #   noninteractive = 0;
+    G.noninteractive = 0
     #   if (argmatch (argv, argc, "-batch", "--batch", 5, NULL, &skip_args))
     #     {
     #       noninteractive = 1;
@@ -1891,6 +1902,7 @@ def main(argc: int, argv: List[str]):
         # 	 faces, and the face implementation uses some symbols as
         # 	 face names.  */
         #       syms_of_xfaces ();
+        syms_of_xfaces()
         #       /* XXX syms_of_keyboard uses some symbols in keymap.c.  It would
         #          be better to arrange things not to have this dependency.  */
         #       syms_of_keymap ();
@@ -1906,6 +1918,7 @@ def main(argc: int, argv: List[str]):
         #       syms_of_fns ();  /* Before syms_of_charset which uses hash tables.  */
         syms_of_fns()
         #       syms_of_fileio ();
+        syms_of_fileio()
         #       /* Before syms_of_coding to initialize Vgc_cons_threshold.  */
         #       syms_of_alloc ();
         #       /* May call Ffuncall and so GC, thus the latter should be initialized.  */
@@ -2151,7 +2164,9 @@ def main(argc: int, argv: List[str]):
         #       syms_of_chartab ();
         #       syms_of_lread ();
         #       syms_of_print ();
+        syms_of_print()
         #       syms_of_eval ();
+        syms_of_eval()
         #       syms_of_floatfns ();
         #
         #       syms_of_buffer ();
@@ -3291,11 +3306,11 @@ def main(argc: int, argv: List[str]):
 #
 @mixin(Q)
 class Q:
-    file_name_handler_alist = Lisp_Symbol("file-name-handler-alist")
-    risky_local_variable = Lisp_Symbol("risky-local-variable")
-    kill_emacs = Lisp_Symbol("kill-emacs")
-    kill_emacs_hook = Lisp_Symbol("kill-emacs-hook")
-    run_hook_query_error_with_timeout = Lisp_Symbol("run-hook-query-error-with-timeout")
+    file_name_handler_alist = build_lisp_symbol("file-name-handler-alist")
+    risky_local_variable = build_lisp_symbol("risky-local-variable")
+    kill_emacs = build_lisp_symbol("kill-emacs")
+    kill_emacs_hook = build_lisp_symbol("kill-emacs-hook")
+    run_hook_query_error_with_timeout = build_lisp_symbol("run-hook-query-error-with-timeout")
 
 # void
 # syms_of_emacs (void)

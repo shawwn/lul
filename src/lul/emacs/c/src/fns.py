@@ -44,6 +44,9 @@ from .buffer import *
 # #include "puresize.h"
 from .puresize import *
 # #include "gnutls.h"
+
+from .eval import *
+
 #
 # static void sort_vector_copy (Lisp_Object pred, ptrdiff_t len,
 #                               Lisp_Object src[restrict VLA_ELEMS (len)],
@@ -3119,143 +3122,184 @@ class F:
 # static EMACS_INT
 # mapcar1 (EMACS_INT leni, Lisp_Object *vals, Lisp_Object fn, Lisp_Object seq)
 # {
-#   if (VECTORP (seq) || COMPILEDP (seq))
-#     {
-#       for (ptrdiff_t i = 0; i < leni; i++)
-#         {
-#           Lisp_Object dummy = call1 (fn, AREF (seq, i));
-#           if (vals)
-#             vals[i] = dummy;
-#         }
-#     }
-#   else if (BOOL_VECTOR_P (seq))
-#     {
-#       for (EMACS_INT i = 0; i < leni; i++)
-#         {
-#           Lisp_Object dummy = call1 (fn, bool_vector_ref (seq, i));
-#           if (vals)
-#             vals[i] = dummy;
-#         }
-#     }
-#   else if (STRINGP (seq))
-#     {
-#       ptrdiff_t i_byte = 0;
-#
-#       for (ptrdiff_t i = 0; i < leni;)
-#         {
-#           ptrdiff_t i_before = i;
-#           int c = fetch_string_char_advance (seq, &i, &i_byte);
-#           Lisp_Object dummy = call1 (fn, make_fixnum (c));
-#           if (vals)
-#             vals[i_before] = dummy;
-#         }
-#     }
-#   else   /* Must be a list, since Flength did not get an error */
-#     {
-#       Lisp_Object tail = seq;
-#       for (ptrdiff_t i = 0; i < leni; i++)
-#         {
-#           if (! CONSP (tail))
-#             return i;
-#           Lisp_Object dummy = call1 (fn, XCAR (tail));
-#           if (vals)
-#             vals[i] = dummy;
-#           tail = XCDR (tail);
-#         }
-#     }
-#
-#   return leni;
+def mapcar1(leni: EMACS_INT, vals: Optional[List[Lisp_Object]], fn: Lisp_Object, seq: Lisp_Object):
+    #   if (VECTORP (seq) || COMPILEDP (seq))
+    #     {
+    if VECTORP(seq) or COMPILEDP(seq):
+        raise NotImplementedError("mapcar1 VECTORP(seq) or COMPILEDP(seq)")
+        #       for (ptrdiff_t i = 0; i < leni; i++)
+        #         {
+        #           Lisp_Object dummy = call1 (fn, AREF (seq, i));
+        #           if (vals)
+        #             vals[i] = dummy;
+        #         }
+        #     }
+        #   else if (BOOL_VECTOR_P (seq))
+        #     {
+    elif BOOL_VECTOR_P(seq):
+        raise NotImplementedError("mapcar1 BOOL_VECTOR_P(seq)")
+        #       for (EMACS_INT i = 0; i < leni; i++)
+        #         {
+        #           Lisp_Object dummy = call1 (fn, bool_vector_ref (seq, i));
+        #           if (vals)
+        #             vals[i] = dummy;
+        #         }
+        #     }
+        #   else if (STRINGP (seq))
+        #     {
+    elif STRINGP(seq):
+        raise NotImplementedError("mapcar1 STRINGP(seq)")
+        #       ptrdiff_t i_byte = 0;
+        #
+        #       for (ptrdiff_t i = 0; i < leni;)
+        #         {
+        #           ptrdiff_t i_before = i;
+        #           int c = fetch_string_char_advance (seq, &i, &i_byte);
+        #           Lisp_Object dummy = call1 (fn, make_fixnum (c));
+        #           if (vals)
+        #             vals[i_before] = dummy;
+        #         }
+        #     }
+        #   else   /* Must be a list, since Flength did not get an error */
+        #     {
+    else:
+        #       Lisp_Object tail = seq;
+        tail = seq
+        #       for (ptrdiff_t i = 0; i < leni; i++)
+        #         {
+        for i in range(leni):
+            #           if (! CONSP (tail))
+            #             return i;
+            if not CONSP(tail):
+                return i
+            #           Lisp_Object dummy = call1 (fn, XCAR (tail));
+            dummy = call1(fn, XCAR(tail))
+            #           if (vals)
+            #             vals[i] = dummy;
+            if vals:
+                vals[i] = dummy
+            #           tail = XCDR (tail);
+            tail = XCDR(tail)
+        #         }
+        #     }
+    #
+    #   return leni;
+    return leni
 # }
 #
-# DEFUN ("mapconcat", Fmapconcat, Smapconcat, 2, 3, 0,
-#        doc: /* Apply FUNCTION to each element of SEQUENCE, and concat the results as strings.
-# In between each pair of results, stick in SEPARATOR.  Thus, " " as
-#   SEPARATOR results in spaces between the values returned by FUNCTION.
-#
-# SEQUENCE may be a list, a vector, a bool-vector, or a string.
-#
-# Optional argument SEPARATOR must be a string, a vector, or a list of
-# characters; nil stands for the empty string.
-#
-# FUNCTION must be a function of one argument, and must return a value
-#   that is a sequence of characters: either a string, or a vector or
-#   list of numbers that are valid character codepoints.  */)
-#   (Lisp_Object function, Lisp_Object sequence, Lisp_Object separator)
-# {
-#   USE_SAFE_ALLOCA;
-#   EMACS_INT leni = XFIXNAT (Flength (sequence));
-#   if (CHAR_TABLE_P (sequence))
-#     wrong_type_argument (Qlistp, sequence);
-#   EMACS_INT args_alloc = 2 * leni - 1;
-#   if (args_alloc < 0)
-#     return empty_unibyte_string;
-#   Lisp_Object *args;
-#   SAFE_ALLOCA_LISP (args, args_alloc);
-#   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
-#   ptrdiff_t nargs = 2 * nmapped - 1;
-#
-#   for (ptrdiff_t i = nmapped - 1; i > 0; i--)
-#     args[i + i] = args[i];
-#
-#   for (ptrdiff_t i = 1; i < nargs; i += 2)
-#     args[i] = separator;
-#
-#   Lisp_Object ret = Fconcat (nargs, args);
-#   SAFE_FREE ();
-#   return ret;
-# }
-#
-# DEFUN ("mapcar", Fmapcar, Smapcar, 2, 2, 0,
-#        doc: /* Apply FUNCTION to each element of SEQUENCE, and make a list of the results.
-# The result is a list just as long as SEQUENCE.
-# SEQUENCE may be a list, a vector, a bool-vector, or a string.  */)
-#   (Lisp_Object function, Lisp_Object sequence)
-# {
-#   USE_SAFE_ALLOCA;
-#   EMACS_INT leni = XFIXNAT (Flength (sequence));
-#   if (CHAR_TABLE_P (sequence))
-#     wrong_type_argument (Qlistp, sequence);
-#   Lisp_Object *args;
-#   SAFE_ALLOCA_LISP (args, leni);
-#   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
-#   Lisp_Object ret = Flist (nmapped, args);
-#   SAFE_FREE ();
-#   return ret;
-# }
-#
-# DEFUN ("mapc", Fmapc, Smapc, 2, 2, 0,
-#        doc: /* Apply FUNCTION to each element of SEQUENCE for side effects only.
-# Unlike `mapcar', don't accumulate the results.  Return SEQUENCE.
-# SEQUENCE may be a list, a vector, a bool-vector, or a string.  */)
-#   (Lisp_Object function, Lisp_Object sequence)
-# {
-#   register EMACS_INT leni;
-#
-#   leni = XFIXNAT (Flength (sequence));
-#   if (CHAR_TABLE_P (sequence))
-#     wrong_type_argument (Qlistp, sequence);
-#   mapcar1 (leni, 0, function, sequence);
-#
-#   return sequence;
-# }
-#
-# DEFUN ("mapcan", Fmapcan, Smapcan, 2, 2, 0,
-#        doc: /* Apply FUNCTION to each element of SEQUENCE, and concatenate
-# the results by altering them (using `nconc').
-# SEQUENCE may be a list, a vector, a bool-vector, or a string. */)
-#      (Lisp_Object function, Lisp_Object sequence)
-# {
-#   USE_SAFE_ALLOCA;
-#   EMACS_INT leni = XFIXNAT (Flength (sequence));
-#   if (CHAR_TABLE_P (sequence))
-#     wrong_type_argument (Qlistp, sequence);
-#   Lisp_Object *args;
-#   SAFE_ALLOCA_LISP (args, leni);
-#   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
-#   Lisp_Object ret = Fnconc (nmapped, args);
-#   SAFE_FREE ();
-#   return ret;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("mapconcat", Fmapconcat, Smapconcat, 2, 3, 0,
+    #        doc: /* Apply FUNCTION to each element of SEQUENCE, and concat the results as strings.
+    # In between each pair of results, stick in SEPARATOR.  Thus, " " as
+    #   SEPARATOR results in spaces between the values returned by FUNCTION.
+    #
+    # SEQUENCE may be a list, a vector, a bool-vector, or a string.
+    #
+    # Optional argument SEPARATOR must be a string, a vector, or a list of
+    # characters; nil stands for the empty string.
+    #
+    # FUNCTION must be a function of one argument, and must return a value
+    #   that is a sequence of characters: either a string, or a vector or
+    #   list of numbers that are valid character codepoints.  */)
+    #   (Lisp_Object function, Lisp_Object sequence, Lisp_Object separator)
+    # {
+    @DEFUN("mapconcat", S.mapconcat, 2, 3, 0)
+    @staticmethod
+    def mapconcat(function: Lisp_Object, sequence: Lisp_Object, separator: Lisp_Object):
+        raise NotImplementedError("mapconcat")
+        #   USE_SAFE_ALLOCA;
+        #   EMACS_INT leni = XFIXNAT (Flength (sequence));
+        #   if (CHAR_TABLE_P (sequence))
+        #     wrong_type_argument (Qlistp, sequence);
+        #   EMACS_INT args_alloc = 2 * leni - 1;
+        #   if (args_alloc < 0)
+        #     return empty_unibyte_string;
+        #   Lisp_Object *args;
+        #   SAFE_ALLOCA_LISP (args, args_alloc);
+        #   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
+        #   ptrdiff_t nargs = 2 * nmapped - 1;
+        #
+        #   for (ptrdiff_t i = nmapped - 1; i > 0; i--)
+        #     args[i + i] = args[i];
+        #
+        #   for (ptrdiff_t i = 1; i < nargs; i += 2)
+        #     args[i] = separator;
+        #
+        #   Lisp_Object ret = Fconcat (nargs, args);
+        #   SAFE_FREE ();
+        #   return ret;
+    # }
+    #
+    # DEFUN ("mapcar", Fmapcar, Smapcar, 2, 2, 0,
+    #        doc: /* Apply FUNCTION to each element of SEQUENCE, and make a list of the results.
+    # The result is a list just as long as SEQUENCE.
+    # SEQUENCE may be a list, a vector, a bool-vector, or a string.  */)
+    #   (Lisp_Object function, Lisp_Object sequence)
+    # {
+    @DEFUN("mapcar", S.mapcar, 2, 2, 0)
+    @staticmethod
+    def mapcar(function: Lisp_Object, sequence: Lisp_Object):
+        #   USE_SAFE_ALLOCA;
+        #   EMACS_INT leni = XFIXNAT (Flength (sequence));
+        leni = XFIXNAT(F.length(sequence))
+        #   if (CHAR_TABLE_P (sequence))
+        #     wrong_type_argument (Qlistp, sequence);
+        if CHAR_TABLE_P(sequence):
+            wrong_type_argument(Q.listp, sequence)
+        #   Lisp_Object *args;
+        #   SAFE_ALLOCA_LISP (args, leni);
+        args = [Q.nil] * leni
+        #   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
+        nmapped = mapcar1(leni, args, function, sequence)
+        #   Lisp_Object ret = Flist (nmapped, args);
+        ret = F.list(nmapped, args)
+        #   SAFE_FREE ();
+        #   return ret;
+        return ret
+    # }
+    #
+    # DEFUN ("mapc", Fmapc, Smapc, 2, 2, 0,
+    #        doc: /* Apply FUNCTION to each element of SEQUENCE for side effects only.
+    # Unlike `mapcar', don't accumulate the results.  Return SEQUENCE.
+    # SEQUENCE may be a list, a vector, a bool-vector, or a string.  */)
+    #   (Lisp_Object function, Lisp_Object sequence)
+    # {
+    @DEFUN("mapc", S.mapc, 2, 2, 0)
+    @staticmethod
+    def mapc(function: Lisp_Object, sequence: Lisp_Object):
+        raise NotImplementedError("mapc")
+        #   register EMACS_INT leni;
+        #
+        #   leni = XFIXNAT (Flength (sequence));
+        #   if (CHAR_TABLE_P (sequence))
+        #     wrong_type_argument (Qlistp, sequence);
+        #   mapcar1 (leni, 0, function, sequence);
+        #
+        #   return sequence;
+    # }
+    #
+    # DEFUN ("mapcan", Fmapcan, Smapcan, 2, 2, 0,
+    #        doc: /* Apply FUNCTION to each element of SEQUENCE, and concatenate
+    # the results by altering them (using `nconc').
+    # SEQUENCE may be a list, a vector, a bool-vector, or a string. */)
+    #      (Lisp_Object function, Lisp_Object sequence)
+    # {
+    @DEFUN("mapcan", S.mapcan, 2, 2, 0)
+    @staticmethod
+    def mapcan(function: Lisp_Object, sequence: Lisp_Object):
+        raise NotImplementedError("mapcan")
+        #   USE_SAFE_ALLOCA;
+        #   EMACS_INT leni = XFIXNAT (Flength (sequence));
+        #   if (CHAR_TABLE_P (sequence))
+        #     wrong_type_argument (Qlistp, sequence);
+        #   Lisp_Object *args;
+        #   SAFE_ALLOCA_LISP (args, leni);
+        #   ptrdiff_t nmapped = mapcar1 (leni, args, function, sequence);
+        #   Lisp_Object ret = Fnconc (nmapped, args);
+        #   SAFE_FREE ();
+        #   return ret;
+    # }
 # 
 # /* This is how C code calls `yes-or-no-p' and allows the user
 #    to redefine it.  */
@@ -6237,69 +6281,160 @@ class F:
 #   return make_int (count_lines (start, CHAR_TO_BYTE (pos)) + 1);
 # }
 # 
-#
+
+@mixin(Q)
+class Q:
+    hash_table_p = build_lisp_symbol("hash-table-p")
+    eq = build_lisp_symbol("eq")
+    eql = build_lisp_symbol("eql")
+    equal = build_lisp_symbol("equal")
+    Ctest = build_lisp_symbol(":test")
+    Csize = build_lisp_symbol(":size")
+    Cpurecopy = build_lisp_symbol(":purecopy")
+    Crehash_size = build_lisp_symbol(":rehash-size")
+    Crehash_threshold = build_lisp_symbol(":rehash-threshold")
+    Cweakness = build_lisp_symbol(":weakness")
+    key = build_lisp_symbol("key")
+    value = build_lisp_symbol("value")
+    hash_table_test = build_lisp_symbol("hash-table-test")
+    key_or_value = build_lisp_symbol("key-or-value")
+    key_and_value = build_lisp_symbol("key-and-value")
+    iv_auto = build_lisp_symbol("iv-auto")
+    md5 = build_lisp_symbol(   "md5")
+    sha1 = build_lisp_symbol(  "sha1")
+    sha224 = build_lisp_symbol("sha224")
+    sha256 = build_lisp_symbol("sha256")
+    sha384 = build_lisp_symbol("sha384")
+    sha512 = build_lisp_symbol("sha512")
+    string_lessp = build_lisp_symbol("string-lessp")
+    provide = build_lisp_symbol("provide")
+    require = build_lisp_symbol("require")
+    yes_or_no_p_history = build_lisp_symbol("yes-or-no-p-history")
+    cursor_in_echo_area = build_lisp_symbol("cursor-in-echo-area")
+    widget_type = build_lisp_symbol("widget-type")
+    overriding_plist_environment = build_lisp_symbol("overriding-plist-environment")
+    features = build_lisp_symbol("features")
+    subfeatures = build_lisp_symbol("subfeatures")
+    funcall = build_lisp_symbol("funcall")
+    plistp = build_lisp_symbol("plistp")
+    list_or_vector_p = build_lisp_symbol("list-or-vector-p")
+    codeset = build_lisp_symbol("codeset")
+    days = build_lisp_symbol("days")
+    months = build_lisp_symbol("months")
+    paper = build_lisp_symbol("paper")
+
 # void
 # syms_of_fns (void)
 # {
 def syms_of_fns():
     # /* Hash table stuff.  */
     # DEFSYM (Qhash_table_p, "hash-table-p");
+    DEFSYM(Q.hash_table_p, "hash-table-p")
     # DEFSYM (Qeq, "eq");
+    DEFSYM(Q.eq, "eq")
     # DEFSYM (Qeql, "eql");
+    DEFSYM(Q.eql, "eql")
     # DEFSYM (Qequal, "equal");
+    DEFSYM(Q.equal, "equal")
     # DEFSYM (QCtest, ":test");
+    DEFSYM(Q.Ctest, ":test")
     # DEFSYM (QCsize, ":size");
+    DEFSYM(Q.Csize, ":size")
     # DEFSYM (QCpurecopy, ":purecopy");
+    DEFSYM(Q.Cpurecopy, ":purecopy")
     # DEFSYM (QCrehash_size, ":rehash-size");
+    DEFSYM(Q.Crehash_size, ":rehash-size")
     # DEFSYM (QCrehash_threshold, ":rehash-threshold");
+    DEFSYM(Q.Crehash_threshold, ":rehash-threshold")
     # DEFSYM (QCweakness, ":weakness");
+    DEFSYM(Q.Cweakness, ":weakness")
     # DEFSYM (Qkey, "key");
+    DEFSYM(Q.key, "key")
     # DEFSYM (Qvalue, "value");
+    DEFSYM(Q.value, "value")
     # DEFSYM (Qhash_table_test, "hash-table-test");
+    DEFSYM(Q.hash_table_test, "hash-table-test")
     # DEFSYM (Qkey_or_value, "key-or-value");
+    DEFSYM(Q.key_or_value, "key-or-value")
     # DEFSYM (Qkey_and_value, "key-and-value");
+    DEFSYM(Q.key_and_value, "key-and-value")
     #
     # defsubr (&Ssxhash_eq);
+    defsubr(S.sxhash_eq)
     # defsubr (&Ssxhash_eql);
+    defsubr(S.sxhash_eql)
     # defsubr (&Ssxhash_equal);
+    defsubr(S.sxhash_equal)
     # defsubr (&Ssxhash_equal_including_properties);
+    defsubr(S.sxhash_equal_including_properties)
     # defsubr (&Smake_hash_table);
+    defsubr(S.make_hash_table)
     # defsubr (&Scopy_hash_table);
+    defsubr(S.copy_hash_table)
     # defsubr (&Shash_table_count);
+    defsubr(S.hash_table_count)
     # defsubr (&Shash_table_rehash_size);
+    defsubr(S.hash_table_rehash_size)
     # defsubr (&Shash_table_rehash_threshold);
+    defsubr(S.hash_table_rehash_threshold)
     # defsubr (&Shash_table_size);
+    defsubr(S.hash_table_size)
     # defsubr (&Shash_table_test);
+    defsubr(S.hash_table_test)
     # defsubr (&Shash_table_weakness);
+    defsubr(S.hash_table_weakness)
     # defsubr (&Shash_table_p);
+    defsubr(S.hash_table_p)
     # defsubr (&Sclrhash);
+    defsubr(S.clrhash)
     # defsubr (&Sgethash);
+    defsubr(S.gethash)
     # defsubr (&Sputhash);
+    defsubr(S.puthash)
     # defsubr (&Sremhash);
+    defsubr(S.remhash)
     # defsubr (&Smaphash);
+    defsubr(S.maphash)
     # defsubr (&Sdefine_hash_table_test);
+    defsubr(S.define_hash_table_test)
     # defsubr (&Sstring_search);
+    defsubr(S.string_search)
     # defsubr (&Sobject_intervals);
+    defsubr(S.object_intervals)
     # defsubr (&Sline_number_at_pos);
+    defsubr(S.line_number_at_pos)
     #
     # /* Crypto and hashing stuff.  */
     # DEFSYM (Qiv_auto, "iv-auto");
+    DEFSYM(Q.iv_auto, "iv-auto")
     #
     # DEFSYM (Qmd5,    "md5");
+    DEFSYM(Q.md5,    "md5")
     # DEFSYM (Qsha1,   "sha1");
+    DEFSYM(Q.sha1,   "sha1")
     # DEFSYM (Qsha224, "sha224");
+    DEFSYM(Q.sha224, "sha224")
     # DEFSYM (Qsha256, "sha256");
+    DEFSYM(Q.sha256, "sha256")
     # DEFSYM (Qsha384, "sha384");
+    DEFSYM(Q.sha384, "sha384")
     # DEFSYM (Qsha512, "sha512");
+    DEFSYM(Q.sha512, "sha512")
     #
     # /* Miscellaneous stuff.  */
     #
     # DEFSYM (Qstring_lessp, "string-lessp");
+    DEFSYM(Q.string_lessp, "string-lessp")
     # DEFSYM (Qprovide, "provide");
+    DEFSYM(Q.provide, "provide")
     # DEFSYM (Qrequire, "require");
+    DEFSYM(Q.require, "require")
     # DEFSYM (Qyes_or_no_p_history, "yes-or-no-p-history");
+    DEFSYM(Q.yes_or_no_p_history, "yes-or-no-p-history")
     # DEFSYM (Qcursor_in_echo_area, "cursor-in-echo-area");
+    DEFSYM(Q.cursor_in_echo_area, "cursor-in-echo-area")
     # DEFSYM (Qwidget_type, "widget-type");
+    DEFSYM(Q.widget_type, "widget-type")
     #
     # DEFVAR_LISP ("overriding-plist-environment", Voverriding_plist_environment,
     #              doc: /* An alist that overrides the plists of the symbols which it lists.
@@ -6308,6 +6443,7 @@ def syms_of_fns():
     # Voverriding_plist_environment = Qnil;
     V.overriding_plist_environment = Q.nil
     # DEFSYM (Qoverriding_plist_environment, "overriding-plist-environment");
+    DEFSYM(Q.overriding_plist_environment, "overriding-plist-environment")
     #
     # staticpro (&string_char_byte_cache_string);
     # string_char_byte_cache_string = Qnil;
@@ -6322,18 +6458,27 @@ def syms_of_fns():
     #sed by `featurep' and `require', and altered by `provide'.  */);
     # Vfeatures = list1 (Qemacs);
     # DEFSYM (Qfeatures, "features");
+    DEFSYM(Q.features, "features")
     # /* Let people use lexically scoped vars named `features'.  */
     # Fmake_var_non_special (Qfeatures);
     # DEFSYM (Qsubfeatures, "subfeatures");
+    DEFSYM(Q.subfeatures, "subfeatures")
     # DEFSYM (Qfuncall, "funcall");
+    DEFSYM(Q.funcall, "funcall")
     # DEFSYM (Qplistp, "plistp");
+    DEFSYM(Q.plistp, "plistp")
     # DEFSYM (Qlist_or_vector_p, "list-or-vector-p");
+    DEFSYM(Q.list_or_vector_p, "list-or-vector-p")
     #
     #ifdef HAVE_LANGINFO_CODESET
     # DEFSYM (Qcodeset, "codeset");
+    DEFSYM(Q.codeset, "codeset")
     # DEFSYM (Qdays, "days");
+    DEFSYM(Q.days, "days")
     # DEFSYM (Qmonths, "months");
+    DEFSYM(Q.months, "months")
     # DEFSYM (Qpaper, "paper");
+    DEFSYM(Q.paper, "paper")
     #endif        /* HAVE_LANGINFO_CODESET */
     #
     # DEFVAR_BOOL ("use-dialog-box", use_dialog_box,
@@ -6363,84 +6508,165 @@ def syms_of_fns():
     # use_short_answers = false;
     #
     # defsubr (&Sidentity);
+    defsubr(S.identity)
     # defsubr (&Srandom);
+    defsubr(S.random)
     # defsubr (&Slength);
+    defsubr(S.length)
     # defsubr (&Ssafe_length);
+    defsubr(S.safe_length)
     # defsubr (&Slength_less);
+    defsubr(S.length_less)
     # defsubr (&Slength_greater);
+    defsubr(S.length_greater)
     # defsubr (&Slength_equal);
+    defsubr(S.length_equal)
     # defsubr (&Sproper_list_p);
+    defsubr(S.proper_list_p)
     # defsubr (&Sstring_bytes);
+    defsubr(S.string_bytes)
     # defsubr (&Sstring_distance);
+    defsubr(S.string_distance)
     # defsubr (&Sstring_equal);
+    defsubr(S.string_equal)
     # defsubr (&Scompare_strings);
+    defsubr(S.compare_strings)
     # defsubr (&Sstring_lessp);
+    defsubr(S.string_lessp)
     # defsubr (&Sstring_version_lessp);
+    defsubr(S.string_version_lessp)
     # defsubr (&Sstring_collate_lessp);
+    defsubr(S.string_collate_lessp)
     # defsubr (&Sstring_collate_equalp);
+    defsubr(S.string_collate_equalp)
     # defsubr (&Sappend);
+    defsubr(S.append)
     # defsubr (&Sconcat);
+    defsubr(S.concat)
     # defsubr (&Svconcat);
+    defsubr(S.vconcat)
     # defsubr (&Scopy_sequence);
+    defsubr(S.copy_sequence)
     # defsubr (&Sstring_make_multibyte);
+    defsubr(S.string_make_multibyte)
     # defsubr (&Sstring_make_unibyte);
+    defsubr(S.string_make_unibyte)
     # defsubr (&Sstring_as_multibyte);
+    defsubr(S.string_as_multibyte)
     # defsubr (&Sstring_as_unibyte);
+    defsubr(S.string_as_unibyte)
     # defsubr (&Sstring_to_multibyte);
+    defsubr(S.string_to_multibyte)
     # defsubr (&Sstring_to_unibyte);
+    defsubr(S.string_to_unibyte)
     # defsubr (&Scopy_alist);
+    defsubr(S.copy_alist)
     # defsubr (&Ssubstring);
+    defsubr(S.substring)
     # defsubr (&Ssubstring_no_properties);
+    defsubr(S.substring_no_properties)
     # defsubr (&Snthcdr);
+    defsubr(S.nthcdr)
     # defsubr (&Snth);
+    defsubr(S.nth)
     # defsubr (&Selt);
+    defsubr(S.elt)
     # defsubr (&Smember);
+    defsubr(S.member)
     # defsubr (&Smemq);
+    defsubr(S.memq)
     # defsubr (&Smemql);
+    defsubr(S.memql)
     # defsubr (&Sassq);
+    defsubr(S.assq)
     # defsubr (&Sassoc);
+    defsubr(S.assoc)
     # defsubr (&Srassq);
+    defsubr(S.rassq)
     # defsubr (&Srassoc);
+    defsubr(S.rassoc)
     # defsubr (&Sdelq);
+    defsubr(S.delq)
     # defsubr (&Sdelete);
+    defsubr(S.delete)
     # defsubr (&Snreverse);
+    defsubr(S.nreverse)
     # defsubr (&Sreverse);
+    defsubr(S.reverse)
     # defsubr (&Ssort);
+    defsubr(S.sort)
     # defsubr (&Splist_get);
+    defsubr(S.plist_get)
     # defsubr (&Sget);
+    defsubr(S.get)
     # defsubr (&Splist_put);
+    defsubr(S.plist_put)
     # defsubr (&Sput);
+    defsubr(S.put)
     # defsubr (&Slax_plist_get);
+    defsubr(S.lax_plist_get)
     # defsubr (&Slax_plist_put);
+    defsubr(S.lax_plist_put)
     # defsubr (&Seql);
+    defsubr(S.eql)
     # defsubr (&Sequal);
+    defsubr(S.equal)
     # defsubr (&Sequal_including_properties);
+    defsubr(S.equal_including_properties)
     # defsubr (&Sfillarray);
+    defsubr(S.fillarray)
     # defsubr (&Sclear_string);
+    defsubr(S.clear_string)
     # defsubr (&Snconc);
+    defsubr(S.nconc)
     # defsubr (&Smapcar);
+    defsubr(S.mapcar)
     # defsubr (&Smapc);
+    defsubr(S.mapc)
     # defsubr (&Smapcan);
+    defsubr(S.mapcan)
     # defsubr (&Smapconcat);
+    defsubr(S.mapconcat)
     # defsubr (&Syes_or_no_p);
+    defsubr(S.yes_or_no_p)
     # defsubr (&Sload_average);
+    defsubr(S.load_average)
     # defsubr (&Sfeaturep);
+    defsubr(S.featurep)
     # defsubr (&Srequire);
+    defsubr(S.require)
     # defsubr (&Sprovide);
+    defsubr(S.provide)
     # defsubr (&Splist_member);
+    defsubr(S.plist_member)
     # defsubr (&Swidget_put);
+    defsubr(S.widget_put)
     # defsubr (&Swidget_get);
+    defsubr(S.widget_get)
     # defsubr (&Swidget_apply);
+    defsubr(S.widget_apply)
     # defsubr (&Sbase64_encode_region);
+    defsubr(S.base64_encode_region)
     # defsubr (&Sbase64_decode_region);
+    defsubr(S.base64_decode_region)
     # defsubr (&Sbase64_encode_string);
+    defsubr(S.base64_encode_string)
     # defsubr (&Sbase64_decode_string);
+    defsubr(S.base64_decode_string)
     # defsubr (&Sbase64url_encode_region);
+    defsubr(S.base64url_encode_region)
     # defsubr (&Sbase64url_encode_string);
+    defsubr(S.base64url_encode_string)
     # defsubr (&Smd5);
+    defsubr(S.md5)
     # defsubr (&Ssecure_hash_algorithms);
+    defsubr(S.secure_hash_algorithms)
     # defsubr (&Ssecure_hash);
+    defsubr(S.secure_hash)
     # defsubr (&Sbuffer_hash);
+    defsubr(S.buffer_hash)
     # defsubr (&Slocale_info);
+    defsubr(S.locale_info)
     # defsubr (&Sbuffer_line_statistics);
+    defsubr(S.buffer_line_statistics)
 # }

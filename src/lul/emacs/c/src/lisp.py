@@ -4,7 +4,7 @@ import enum as _enum
 import dataclasses
 import contextvars as CV
 
-from ...c import *
+from ...c.runtime import *
 from .globals_ import *
 
 
@@ -71,6 +71,10 @@ GCTYPEBITS = 3
 EMACS_INT = int
 EMACS_UINT = int
 EMACS_INT_MAX = LLONG_MAX
+
+bool_t = Union[int, bool]
+size_t = int
+bool_bf = Union[int, bool]
 
 # /* Extra internal type checking?  */
 #
@@ -190,6 +194,54 @@ else: # ENABLE_CHECKING
 # #define INTTYPEBITS (GCTYPEBITS - 1)
 INTTYPEBITS = GCTYPEBITS - 1
 # DEFINE_GDB_SYMBOL_END (INTTYPEBITS)
+
+# #define lisp_h_CHECK_FIXNUM(x) CHECK_TYPE (FIXNUMP (x), Qfixnump, x)
+# #define lisp_h_CHECK_SYMBOL(x) CHECK_TYPE (SYMBOLP (x), Qsymbolp, x)
+# #define lisp_h_CHECK_TYPE(ok, predicate, x) \
+#    ((ok) ? (void) 0 : wrong_type_argument (predicate, x))
+# #define lisp_h_CONSP(x) TAGGEDP (x, Lisp_Cons)
+# #define lisp_h_EQ(x, y) (XLI (x) == XLI (y))
+# #define lisp_h_FIXNUMP(x) \
+#    (! (((unsigned) (XLI (x) >> (USE_LSB_TAG ? 0 : FIXNUM_BITS)) \
+# 	- (unsigned) (Lisp_Int0 >> !USE_LSB_TAG)) \
+#        & ((1 << INTTYPEBITS) - 1)))
+# #define lisp_h_FLOATP(x) TAGGEDP (x, Lisp_Float)
+# #define lisp_h_NILP(x) EQ (x, Qnil)
+# #define lisp_h_SET_SYMBOL_VAL(sym, v) \
+#    (eassert ((sym)->u.s.redirect == SYMBOL_PLAINVAL), \
+#     (sym)->u.s.val.value = (v))
+# #define lisp_h_SYMBOL_CONSTANT_P(sym) \
+#    (XSYMBOL (sym)->u.s.trapped_write == SYMBOL_NOWRITE)
+# #define lisp_h_SYMBOL_TRAPPED_WRITE_P(sym) (XSYMBOL (sym)->u.s.trapped_write)
+def lisp_h_SYMBOL_TRAPPED_WRITE_P(sym):
+    return XSYMBOL(sym).u.s.trapped_write
+# #define lisp_h_SYMBOL_VAL(sym) \
+#    (eassert ((sym)->u.s.redirect == SYMBOL_PLAINVAL), (sym)->u.s.val.value)
+# #define lisp_h_SYMBOLP(x) TAGGEDP (x, Lisp_Symbol)
+# #define lisp_h_TAGGEDP(a, tag) \
+#    (! (((unsigned) (XLI (a) >> (USE_LSB_TAG ? 0 : VALBITS)) \
+# 	- (unsigned) (tag)) \
+#        & ((1 << GCTYPEBITS) - 1)))
+# #define lisp_h_VECTORLIKEP(x) TAGGEDP (x, Lisp_Vectorlike)
+# #define lisp_h_XCAR(c) XCONS (c)->u.s.car
+# #define lisp_h_XCDR(c) XCONS (c)->u.s.u.cdr
+# #define lisp_h_XCONS(a) \
+#    (eassert (CONSP (a)), XUNTAG (a, Lisp_Cons, struct Lisp_Cons))
+# #define lisp_h_XHASH(a) XUFIXNUM_RAW (a)
+# #if USE_LSB_TAG
+# # define lisp_h_make_fixnum_wrap(n) \
+#     XIL ((EMACS_INT) (((EMACS_UINT) (n) << INTTYPEBITS) + Lisp_Int0))
+# # if defined HAVE_STATEMENT_EXPRESSIONS && defined HAVE_TYPEOF
+# #  define lisp_h_make_fixnum(n) \
+#      ({ typeof (+(n)) lisp_h_make_fixnum_n = n; \
+# 	eassert (!FIXNUM_OVERFLOW_P (lisp_h_make_fixnum_n)); \
+# 	lisp_h_make_fixnum_wrap (lisp_h_make_fixnum_n); })
+# # else
+# #  define lisp_h_make_fixnum(n) lisp_h_make_fixnum_wrap (n)
+# # endif
+# # define lisp_h_XFIXNUM_RAW(a) (XLI (a) >> INTTYPEBITS)
+# # define lisp_h_XTYPE(a) ((enum Lisp_Type) (XLI (a) & ~VALMASK))
+# #endif
 
 # /* Defined in emacs.c.  */
 #
@@ -488,7 +540,7 @@ SYMBOL_TRAPPED_WRITE = symbol_trapped_write.SYMBOL_TRAPPED_WRITE
 @dataclasses.dataclass
 class Lisp_Symbol(Generic[TLisp]):
     # /* The symbol's name, as a Lisp string.  */
-    name: str
+    name: Lisp_String = None
 
     # /* Indicates where the value can be found:
     # 	 0 : it's a plain var, the value is in the `value' field.
@@ -527,7 +579,7 @@ class Lisp_Symbol(Generic[TLisp]):
     plist: Lisp_Object = None
 
     def __repr__(self):
-        return self.name
+        return f"{self.name}"
 
     @property
     def u(self):
@@ -537,17 +589,13 @@ class Lisp_Symbol(Generic[TLisp]):
     def s(self):
         return self
 
+def build_lisp_symbol(name: str):
+    return Lisp_Symbol(build_pure_c_string(name))
+    # return Lisp_Symbol()
+
 @mixin(G)
 class G:
     Lisp_Symbol = globals()["Lisp_Symbol"]
-
-
-@mixin(Q)
-class Q:
-    t = Lisp_Symbol("t")
-    nil = Lisp_Symbol("nil")
-    unbound = Lisp_Symbol("unbound")
-    variable_documentation = Lisp_Symbol("variable-documentation")
 
 
 # /* Declare a Lisp-callable function.  The MAXARGS parameter has the same
@@ -955,6 +1003,9 @@ def XFIXNUM(a: Lisp_Object):
 #   EMACS_INT int0 = Lisp_Int0;
 #   return USE_LSB_TAG ? make_fixnum (n) : XIL (n + (int0 << VALBITS));
 # }
+def make_fixed_natnum(n: EMACS_INT):
+    assert 0 <= n and n <= MOST_POSITIVE_FIXNUM
+    return n
 #
 # /* Return true if X and Y are the same object.  */
 #
@@ -989,9 +1040,13 @@ def make_lisp_ptr(ptr: TLisp, type: Type[TLisp]) -> TLisp:
     return ptr
 #
 # #define XSETINT(a, b) ((a) = make_fixnum (b))
+def XSETINT(b): return make_fixnum(b)
 # #define XSETFASTINT(a, b) ((a) = make_fixed_natnum (b))
+def XSETFASTINT(b): return make_fixed_natnum(b)
 # #define XSETCONS(a, b) ((a) = make_lisp_ptr (b, Lisp_Cons))
+def XSETCONS(b): return make_lisp_ptr(b, Lisp_Cons)
 # #define XSETVECTOR(a, b) ((a) = make_lisp_ptr (b, Lisp_Vectorlike))
+def XSETVECTOR(b): return make_lisp_ptr(b, Lisp_Vectorlike)
 # #define XSETSTRING(a, b) ((a) = make_lisp_ptr (b, Lisp_String))
 def XSETSTRING(b): return make_lisp_ptr(b, Lisp_String)
 # #define XSETSYMBOL(a, b) ((a) = make_lisp_symbol (b))
@@ -1035,6 +1090,8 @@ def XSETSYMBOL(b): return make_lisp_ptr(b, Lisp_Symbol)
 # #define XSETWINDOW(a, b) (XSETPSEUDOVECTOR (a, b, PVEC_WINDOW))
 # #define XSETTERMINAL(a, b) (XSETPSEUDOVECTOR (a, b, PVEC_TERMINAL))
 # #define XSETSUBR(a, b) (XSETPSEUDOVECTOR (a, b, PVEC_SUBR))
+def XSETSUBR(b) -> Lisp_Subr:
+    return make_lisp_ptr(b, Lisp_Subr)
 # #define XSETBUFFER(a, b) (XSETPSEUDOVECTOR (a, b, PVEC_BUFFER))
 def XSETBUFFER(b) -> buffer:
     from .buffer import buffer
@@ -1285,13 +1342,33 @@ class Lisp_String:
     def s(self):
         return self
 
-    def __repr__(self):
-        s = self.data[0:SBYTES(self)]
+    @property
+    def string(self):
+        s = bytes(self)
         try:
             s = s.decode('utf-8')
         except UnicodeDecodeError:
             pass
-        return f"Lisp_String({s!r})"
+        return s
+
+    def __str__(self):
+        s = bytes(self)
+        try:
+            return s.decode('utf-8')
+        except UnicodeDecodeError:
+            return s.decode('latin1')
+
+    def __bytes__(self):
+        return bytes(self.data[0:SBYTES(self)])
+
+    def __eq__(self, other):
+        return self.string == other
+
+    def __ne__(self, other):
+        return self.string != other
+
+    def __repr__(self):
+        return f"Lisp_String({self.string!r})"
 # };
 # verify (GCALIGNED (struct Lisp_String));
 #
@@ -1946,6 +2023,7 @@ class Lisp_Subr:
     #       Lisp_Object (*aUNEVALLED) (Lisp_Object args);
     #       Lisp_Object (*aMANY) (ptrdiff_t, Lisp_Object *);
     #     } function;
+    function: Callable = None
     #     short min_args, max_args;
     min_args: int = None
     max_args: int = None
@@ -1964,6 +2042,10 @@ class Lisp_Subr:
     #     Lisp_Object lambda_list;
     #     Lisp_Object type;
     # #endif
+
+    def __repr__(self):
+        return f'#<subr {self.symbol_name}>'
+
 #   } GCALIGNED_STRUCT;
 # union Aligned_Lisp_Subr
 #   {
@@ -2054,6 +2136,10 @@ def XSUBR(a: Lisp_Object) -> Lisp_Subr:
 # {
 #   return lisp_h_SYMBOL_VAL (sym);
 # }
+def SYMBOL_VAL(sym: Lisp_Symbol):
+    # (eassert ((sym)->u.s.redirect == SYMBOL_PLAINVAL), (sym)->u.s.val.value)
+    assert sym.u.s.redirect == SYMBOL_PLAINVAL
+    return sym.u.s.val.value
 #
 # INLINE struct Lisp_Symbol *
 # SYMBOL_ALIAS (struct Lisp_Symbol *sym)
@@ -2061,6 +2147,9 @@ def XSUBR(a: Lisp_Object) -> Lisp_Subr:
 #   eassume (sym->u.s.redirect == SYMBOL_VARALIAS && sym->u.s.val.alias);
 #   return sym->u.s.val.alias;
 # }
+def SYMBOL_ALIAS(sym: Lisp_Symbol) -> Lisp_Symbol:
+    assert sym.u.s.redirect == SYMBOL_VARALIAS and sym.u.s.val.alias
+    return sym.u.s.val.alias
 # INLINE struct Lisp_Buffer_Local_Value *
 # SYMBOL_BLV (struct Lisp_Symbol *sym)
 # {
@@ -2089,6 +2178,9 @@ def SET_SYMBOL_VAL(sym: Lisp_Symbol, v):
 #   eassume (sym->u.s.redirect == SYMBOL_VARALIAS && v);
 #   sym->u.s.val.alias = v;
 # }
+def SET_SYMBOL_ALIAS(sym: Lisp_Symbol, v: Lisp_Symbol):
+    assert sym.u.s.redirect == SYMBOL_VARALIAS and v
+    sym.u.s.val.alias = v
 # INLINE void
 # SET_SYMBOL_BLV (struct Lisp_Symbol *sym, struct Lisp_Buffer_Local_Value *v)
 # {
@@ -2117,6 +2209,8 @@ def SYMBOL_NAME(sym: Lisp_Object):
 # {
 #   return XSYMBOL (sym)->u.s.interned != SYMBOL_UNINTERNED;
 # }
+def SYMBOL_INTERNED_P(sym: Lisp_Object):
+    return XSYMBOL(sym).u.s.interned != SYMBOL_UNINTERNED
 #
 # /* Value is true if SYM is interned in initial_obarray.  */
 #
@@ -2125,6 +2219,8 @@ def SYMBOL_NAME(sym: Lisp_Object):
 # {
 #   return XSYMBOL (sym)->u.s.interned == SYMBOL_INTERNED_IN_INITIAL_OBARRAY;
 # }
+def SYMBOL_INTERNED_IN_INITIAL_OBARRAY_P(sym: Lisp_Object):
+    return XSYMBOL(sym).u.s.interned == SYMBOL_INTERNED_IN_INITIAL_OBARRAY
 #
 # /* Value is non-zero if symbol cannot be changed through a simple set,
 #    i.e. it's a constant (e.g. nil, t, :keywords), or it has some
@@ -2135,6 +2231,8 @@ def SYMBOL_NAME(sym: Lisp_Object):
 # {
 #   return lisp_h_SYMBOL_TRAPPED_WRITE_P (sym);
 # }
+def SYMBOL_TRAPPED_WRITE_P(sym: Lisp_Object):
+    return lisp_h_SYMBOL_TRAPPED_WRITE_P(sym)
 #
 # /* Value is non-zero if symbol cannot be changed at all, i.e. it's a
 #    constant (e.g. nil, t, :keywords).  Code that actually wants to
@@ -2146,12 +2244,38 @@ def SYMBOL_NAME(sym: Lisp_Object):
 # {
 #   return lisp_h_SYMBOL_CONSTANT_P (sym);
 # }
+def SYMBOL_CONSTANT_P(sym: Lisp_Object):
+    return XSYMBOL(sym).u.s.trapped_write == SYMBOL_NOWRITE
+
 #
 # /* Placeholder for make-docfile to process.  The actual symbol
 #    definition is done by lread.c's define_symbol.  */
 # #define DEFSYM(sym, name) /* empty */
+@overload
+def DEFSYM(name: str) -> Lisp_Symbol:
+    ...
+@overload
 def DEFSYM(sym: Lisp_Symbol, name: str):
-    assert sym.name == name
+    ...
+def DEFSYM(*args):
+    if len(args) == 1:
+        return DEFSYM_1(*args)
+    else:
+        return DEFSYM_2(*args)
+
+def DEFSYM_1(name: str):
+    sym = Lisp_Symbol()
+    from . import lread
+    lread.define_symbol(sym, name)
+    return sym
+
+def DEFSYM_2(sym: Lisp_Symbol, name: str):
+    if sym.name is None:
+        # sym.name = build_pure_c_string(name)
+        from . import lread
+        lread.define_symbol(sym, name)
+    else:
+        assert sym.name == name
 
 # 
 # /***********************************************************************
@@ -2498,6 +2622,9 @@ def DEFSYM(sym: Lisp_Symbol, name: str):
 # {
 #   return PSEUDOVECTORP (x, PVEC_MARKER);
 # }
+def MARKERP(x: Lisp_Object):
+    print("TODO: MARKERP")
+    return False
 #
 # INLINE struct Lisp_Marker *
 # XMARKER (Lisp_Object a)
@@ -2579,11 +2706,15 @@ def INTEGERP(x):
 # {
 #   return FIXNUM_OVERFLOW_P (n) ? make_bigint (n) : make_fixnum (n);
 # }
+def make_int(n: int):
+    return make_fixnum(n)
 # INLINE Lisp_Object
 # make_uint (uintmax_t n)
 # {
 #   return FIXNUM_OVERFLOW_P (n) ? make_biguint (n) : make_fixnum (n);
 # }
+def make_uint(n: int):
+    return make_fixnum(n)
 #
 # /* Return a Lisp integer equal to the value of the C integer EXPR.  */
 # #define INT_TO_INTEGER(expr) \
@@ -2863,7 +2994,6 @@ def FRAMEP(a: Lisp_Object):
 def RECORDP(a: Lisp_Object):
     print("TODO: RECORDP")
     return False
-
 #
 # INLINE void
 # CHECK_RECORD (Lisp_Object x)
@@ -2892,7 +3022,9 @@ def ARRAYP(x: Lisp_Object):
 # {
 #   CHECK_TYPE (CONSP (x) || NILP (x), Qlistp, x);
 # }
-#
+def CHECK_LIST(x: Lisp_Object):
+    return CHECK_TYPE(CONSP(x) or NILP(x), Q.listp, x)
+
 # INLINE void
 # CHECK_LIST_END (Lisp_Object x, Lisp_Object y)
 # {
@@ -3018,12 +3150,17 @@ def CHECK_SUBR(x):
 # def DEFUN(lname: str, fnname: Callable[[Type], Callable], sname: Callable[[Type], Lisp_Subr], minargs: int, maxargs: int, intspec: int, doc: str = None):
 def DEFUN(lname: str, sname: Lisp_Subr, minargs: int, maxargs: int, intspec: int, doc: str = None):
     def DEFUN_(f):
+        if isinstance(f, (staticmethod, classmethod)):
+            fn = f.__get__(F)
+        else:
+            fn = f
         subr = sname
+        subr.function = fn
         subr.symbol_name = lname
         subr.min_args = minargs
         subr.max_args = maxargs
         subr.intspec = intspec
-        f.subr = subr
+        fn.subr = subr
         return f
     return DEFUN_
 
@@ -3032,6 +3169,9 @@ def DEFUN(lname: str, sname: Lisp_Subr, minargs: int, maxargs: int, intspec: int
 # /* defsubr (Sname);
 #    is how we define the symbol for function `name' at start-up time.  */
 # extern void defsubr (union Aligned_Lisp_Subr *);
+def defsubr(subr: Lisp_Subr):
+    from . import lread
+    return lread.defsubr(subr)
 #
 # enum maxargs
 #   {
@@ -3522,21 +3662,28 @@ def set_string_intervals(s: Lisp_Object, i: INTERVAL):
 #    in practice, and the code below assumes this so a compiler can
 #    generate better code if EMACS_INT is 64 bits.  */
 # typedef intmax_t modiff_count;
+modiff_count = int
 #
 # INLINE modiff_count
 # modiff_incr (modiff_count *a)
 # {
-#   modiff_count a0 = *a;
-#   bool modiff_overflow = INT_ADD_WRAPV (a0, 1, a);
-#   eassert (!modiff_overflow && *a >> 30 >> 30 == 0);
-#   return a0;
+def modiff_incr(a: modiff_count):
+    # modiff_count a0 = *a;
+    # bool modiff_overflow = INT_ADD_WRAPV (a0, 1, a);
+    a += 1
+    # eassert (!modiff_overflow && *a >> 30 >> 30 == 0);
+    # return a0;
+    return a
 # }
 #
 # INLINE Lisp_Object
 # modiff_to_integer (modiff_count a)
 # {
-#   eassume (0 <= a && a >> 30 >> 30 == 0);
-#   return make_int (a);
+def modiff_to_integer(a: modiff_count):
+    #   eassume (0 <= a && a >> 30 >> 30 == 0);
+    assert 0 <= a and a >> 30 >> 30 == 0
+    #   return make_int (a);
+    return make_int(a)
 # }
 #
 # /* Defined in data.c.  */
@@ -4126,6 +4273,7 @@ def build_pure_c_string(s: str) -> Lisp_String:
 #     def syms_of_lread():
 #         raise NotImplementedError()
 
+
 # INLINE Lisp_Object
 # intern (const char *str)
 # {
@@ -4137,7 +4285,8 @@ def intern_c_string(s: str):
     # intern_c_string (const char *str)
     # {
     #   return intern_c_string_1 (str, strlen (str));
-    return intern_c_string_1(s)
+    from . import lread
+    return lread.intern_c_string_1(s)
     # }
 
 # /* Defined in eval.c.  */
@@ -4253,6 +4402,10 @@ def xsignal(error_symbol: Lisp_Object, data: Lisp_Object):
 # {
 #   return PSEUDOVECTORP (o, PVEC_MODULE_FUNCTION);
 # }
+def MODULE_FUNCTIONP(o: Lisp_Object):
+    # return PSEUDOVECTORP (o, PVEC_MODULE_FUNCTION);
+    print("TODO: MODULE_FUNCTIONP")
+    return false
 #
 # INLINE struct Lisp_Module_Function *
 # XMODULE_FUNCTION (Lisp_Object o)
@@ -4311,7 +4464,13 @@ def xsignal(error_symbol: Lisp_Object, data: Lisp_Object):
 # extern Lisp_Object disable_line_numbers_overlay_at_eob (void);
 # extern AVOID nsberror (Lisp_Object);
 # extern void adjust_overlays_for_insert (ptrdiff_t, ptrdiff_t);
+def adjust_overlays_for_insert(pos: ptrdiff_t, length: ptrdiff_t):
+    from . import buffer_c
+    return buffer_c.adjust_overlays_for_insert(pos, length)
 # extern void adjust_overlays_for_delete (ptrdiff_t, ptrdiff_t);
+def adjust_overlays_for_delete(pos: ptrdiff_t, length: ptrdiff_t):
+    from . import buffer_c
+    return buffer_c.adjust_overlays_for_delete(pos, length)
 # extern void fix_start_end_in_overlays (ptrdiff_t, ptrdiff_t);
 # extern void report_overlay_modification (Lisp_Object, Lisp_Object, bool,
 #                                          Lisp_Object, Lisp_Object, Lisp_Object);
@@ -4788,43 +4947,55 @@ def xsignal(error_symbol: Lisp_Object, data: Lisp_Object):
 # #endif /* DOS_NT */
 #
 # #ifdef HAVE_NATIVE_COMP
-# INLINE bool
-# SUBR_NATIVE_COMPILEDP (Lisp_Object a)
-# {
-#   return SUBRP (a) && !NILP (XSUBR (a)->native_comp_u);
-# }
-#
-# INLINE bool
-# SUBR_NATIVE_COMPILED_DYNP (Lisp_Object a)
-# {
-#   return SUBR_NATIVE_COMPILEDP (a) && !NILP (XSUBR (a)->lambda_list);
-# }
-#
-# INLINE Lisp_Object
-# SUBR_TYPE (Lisp_Object a)
-# {
-#   return XSUBR (a)->type;
-# }
-#
-# INLINE struct Lisp_Native_Comp_Unit *
-# allocate_native_comp_unit (void)
-# {
-#   return ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Native_Comp_Unit,
-# 				       data_impure_vec, PVEC_NATIVE_COMP_UNIT);
-# }
-# #else
-# INLINE bool
-# SUBR_NATIVE_COMPILEDP (Lisp_Object a)
-# {
-#   return false;
-# }
-#
-# INLINE bool
-# SUBR_NATIVE_COMPILED_DYNP (Lisp_Object a)
-# {
-#   return false;
-# }
-#
+if c_ifdef("HAVE_NATIVE_COMP"):
+    # INLINE bool
+    # SUBR_NATIVE_COMPILEDP (Lisp_Object a)
+    # {
+    #   return SUBRP (a) && !NILP (XSUBR (a)->native_comp_u);
+    # }
+    def SUBR_NATIVE_COMPILEDP(a: Lisp_Object):
+        return SUBRP(a) and not NILP(XSUBR(a).native_comp_u)
+    #
+    # INLINE bool
+    # SUBR_NATIVE_COMPILED_DYNP (Lisp_Object a)
+    # {
+    #   return SUBR_NATIVE_COMPILEDP (a) && !NILP (XSUBR (a)->lambda_list);
+    # }
+    def SUBR_NATIVE_COMPILED_DYNP(a: Lisp_Object):
+        return SUBR_NATIVE_COMPILEDP(a) and not NILP(XSUBR(a).lambda_list)
+    #
+    # INLINE Lisp_Object
+    # SUBR_TYPE (Lisp_Object a)
+    # {
+    #   return XSUBR (a)->type;
+    # }
+    def SUBR_TYPE(a: Lisp_Object):
+        return XSUBR(a).type
+    #
+    # INLINE struct Lisp_Native_Comp_Unit *
+    # allocate_native_comp_unit (void)
+    # {
+    #   return ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Native_Comp_Unit,
+    # 				       data_impure_vec, PVEC_NATIVE_COMP_UNIT);
+    # }
+    # #else
+else:
+    # INLINE bool
+    # SUBR_NATIVE_COMPILEDP (Lisp_Object a)
+    # {
+    #   return false;
+    # }
+    def SUBR_NATIVE_COMPILEDP(a: Lisp_Object):
+        return false
+    #
+    # INLINE bool
+    # SUBR_NATIVE_COMPILED_DYNP (Lisp_Object a)
+    # {
+    #   return false;
+    # }
+    def SUBR_NATIVE_COMPILED_DYNP(a: Lisp_Object):
+        return false
+    #
 # #endif
 #
 # /* Defined in lastfile.c.  */
@@ -5233,16 +5404,27 @@ def circular_list(list: Lisp_Object):
 
 @mixin(S)
 class S:
-    def __missing__(self, name):
-        setattr(self, name, val := Lisp_Subr())
+    def __missing__(self, id: str):
+        setattr(self, id, val := Lisp_Subr(symbol_name=uncompile_id(id.rstrip("_"))))
         return val
+
+# @mixin(Q)
+# class Q:
+#     def __missing__(self, id):
+#         setattr(self, id, val := intern_c_string(uncompile_id(id)))
+#         return val
+
+
+# @mixin(Q)
+# class Q:
+#     t = build_lisp_symbol("t")
+#     nil = build_lisp_symbol("nil")
+#     unbound = build_lisp_symbol("unbound")
+#     variable_documentation = build_lisp_symbol("variable-documentation")
 
 @mixin(Q)
 class Q:
-    def __missing__(self, id):
-        setattr(self, id, val := Lisp_Symbol(uncompile_id(id)))
-        return val
-
-
-def memcpy(dst: bytearray, dst_offset: int, src: bytearray, src_offset: int, size: int):
-    dst[dst_offset:dst_offset+size] = src[src_offset:src_offset+size]
+    t = Lisp_Symbol()
+    nil = Lisp_Symbol()
+    unbound = Lisp_Symbol()
+    variable_documentation = Lisp_Symbol()

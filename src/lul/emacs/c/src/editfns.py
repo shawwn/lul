@@ -1,4 +1,3 @@
-from .runtime import *
 # /* Lisp functions pertaining to editing.                 -*- coding: utf-8 -*-
 #
 # Copyright (C) 1985-1987, 1989, 1993-2021 Free Software Foundation, Inc.
@@ -35,6 +34,7 @@ from .runtime import *
 # #endif
 #
 # #include "lisp.h"
+from .lisp import *
 #
 # #include <float.h>
 # #include <limits.h>
@@ -49,10 +49,15 @@ from .runtime import *
 # #include "intervals.h"
 # #include "systime.h"
 # #include "character.h"
+from .character import *
 # #include "buffer.h"
+from .buffer import *
 # #include "window.h"
 # #include "blockinput.h"
-#
+
+from .alloc import *
+from .indent_c import *
+
 # #ifdef WINDOWSNT
 # # include "w32common.h"
 # #endif
@@ -2509,232 +2514,244 @@ class F:
 # }
 #
 #
-# DEFUN ("translate-region-internal", Ftranslate_region_internal,
-#        Stranslate_region_internal, 3, 3, 0,
-#        doc: /* Internal use only.
-# From START to END, translate characters according to TABLE.
-# TABLE is a string or a char-table; the Nth character in it is the
-# mapping for the character with code N.
-# It returns the number of characters changed.  */)
-#   (Lisp_Object start, Lisp_Object end, Lisp_Object table)
-# {
-#   int translatable_chars = MAX_CHAR + 1;
-#   bool multibyte = !NILP (BVAR (current_buffer, enable_multibyte_characters));
-#   bool string_multibyte UNINIT;
-#
-#   validate_region (&start, &end);
-#   if (STRINGP (table))
-#     {
-#       if (! multibyte)
-#         table = string_make_unibyte (table);
-#       translatable_chars = min (translatable_chars, SBYTES (table));
-#       string_multibyte = STRING_MULTIBYTE (table);
-#     }
-#   else if (! (CHAR_TABLE_P (table)
-#               && EQ (XCHAR_TABLE (table)->purpose, Qtranslation_table)))
-#     error ("Not a translation table");
-#
-#   ptrdiff_t pos = XFIXNUM (start);
-#   ptrdiff_t pos_byte = CHAR_TO_BYTE (pos);
-#   ptrdiff_t end_pos = XFIXNUM (end);
-#   modify_text (pos, end_pos);
-#
-#   ptrdiff_t characters_changed = 0;
-#
-#   while (pos < end_pos)
-#     {
-#       unsigned char *p = BYTE_POS_ADDR (pos_byte);
-#       unsigned char *str UNINIT;
-#       unsigned char buf[MAX_MULTIBYTE_LENGTH];
-#       int len, oc;
-#
-#       if (multibyte)
-#         oc = string_char_and_length (p, &len);
-#       else
-#         oc = *p, len = 1;
-#       if (oc < translatable_chars)
-#         {
-#           int nc; /* New character.  */
-#           int str_len UNINIT;
-#           Lisp_Object val;
-#
-#           if (STRINGP (table))
-#             {
-#               /* Reload as signal_after_change in last iteration may GC.  */
-#               unsigned char *tt = SDATA (table);
-#
-#               if (string_multibyte)
-#                 {
-#                   str = tt + string_char_to_byte (table, oc);
-#                   nc = string_char_and_length (str, &str_len);
-#                 }
-#               else
-#                 {
-#                   nc = tt[oc];
-#                   if (! ASCII_CHAR_P (nc) && multibyte)
-#                     {
-#                       str_len = BYTE8_STRING (nc, buf);
-#                       str = buf;
-#                     }
-#                   else
-#                     {
-#                       str_len = 1;
-#                       str = tt + oc;
-#                     }
-#                 }
-#             }
-#           else
-#             {
-#               nc = oc;
-#               val = CHAR_TABLE_REF (table, oc);
-#               if (CHARACTERP (val))
-#                 {
-#                   nc = XFIXNAT (val);
-#                   str_len = CHAR_STRING (nc, buf);
-#                   str = buf;
-#                 }
-#               else if (VECTORP (val) || (CONSP (val)))
-#                 {
-#                   /* VAL is [TO_CHAR ...] or (([FROM-CHAR ...] .  TO) ...)
-#                      where TO is TO-CHAR or [TO-CHAR ...].  */
-#                   nc = -1;
-#                 }
-#             }
-#
-#           if (nc != oc && nc >= 0)
-#             {
-#               /* Simple one char to one char translation.  */
-#               if (len != str_len)
-#                 {
-#                   Lisp_Object string;
-#
-#                   /* This is less efficient, because it moves the gap,
-#                      but it should handle multibyte characters correctly.  */
-#                   string = make_multibyte_string ((char *) str, 1, str_len);
-#                   replace_range (pos, pos + 1, string,
-#                                  true, false, true, false, false);
-#                   len = str_len;
-#                 }
-#               else
-#                 {
-#                   record_change (pos, 1);
-#                   while (str_len-- > 0)
-#                     *p++ = *str++;
-#                   signal_after_change (pos, 1, 1);
-#                   update_compositions (pos, pos + 1, CHECK_BORDER);
-#                 }
-#               characters_changed++;
-#             }
-#           else if (nc < 0)
-#             {
-#               if (CONSP (val))
-#                 {
-#                   val = check_translation (pos, pos_byte, end_pos, val);
-#                   if (NILP (val))
-#                     {
-#                       pos_byte += len;
-#                       pos++;
-#                       continue;
-#                     }
-#                   /* VAL is ([FROM-CHAR ...] . TO).  */
-#                   len = ASIZE (XCAR (val));
-#                   val = XCDR (val);
-#                 }
-#               else
-#                 len = 1;
-#
-#               Lisp_Object string
-#                 = (VECTORP (val)
-#                    ? Fconcat (1, &val)
-#                    : Fmake_string (make_fixnum (1), val, Qnil));
-#               replace_range (pos, pos + len, string, true, false, true, false,
-#                              false);
-#               pos_byte += SBYTES (string);
-#               pos += SCHARS (string);
-#               characters_changed += SCHARS (string);
-#               end_pos += SCHARS (string) - len;
-#               continue;
-#             }
-#         }
-#       pos_byte += len;
-#       pos++;
-#     }
-#
-#   return make_fixnum (characters_changed);
-# }
-#
-# DEFUN ("delete-region", Fdelete_region, Sdelete_region, 2, 2, "r",
-#        doc: /* Delete the text between START and END.
-# If called interactively, delete the region between point and mark.
-# This command deletes buffer text without modifying the kill ring.  */)
-#   (Lisp_Object start, Lisp_Object end)
-# {
-#   validate_region (&start, &end);
-#   del_range (XFIXNUM (start), XFIXNUM (end));
-#   return Qnil;
-# }
-#
-# DEFUN ("delete-and-extract-region", Fdelete_and_extract_region,
-#        Sdelete_and_extract_region, 2, 2, 0,
-#        doc: /* Delete the text between START and END and return it.  */)
-#   (Lisp_Object start, Lisp_Object end)
-# {
-#   validate_region (&start, &end);
-#   if (XFIXNUM (start) == XFIXNUM (end))
-#     return empty_unibyte_string;
-#   return del_range_1 (XFIXNUM (start), XFIXNUM (end), 1, 1);
-# }
-# 
-# DEFUN ("widen", Fwiden, Swiden, 0, 0, "",
-#        doc: /* Remove restrictions (narrowing) from current buffer.
-# This allows the buffer's full text to be seen and edited.  */)
-#   (void)
-# {
-#   if (BEG != BEGV || Z != ZV)
-#     current_buffer->clip_changed = 1;
-#   BEGV = BEG;
-#   BEGV_BYTE = BEG_BYTE;
-#   SET_BUF_ZV_BOTH (current_buffer, Z, Z_BYTE);
-#   /* Changing the buffer bounds invalidates any recorded current column.  */
-#   invalidate_current_column ();
-#   return Qnil;
-# }
-#
-# DEFUN ("narrow-to-region", Fnarrow_to_region, Snarrow_to_region, 2, 2, "r",
-#        doc: /* Restrict editing in this buffer to the current region.
-# The rest of the text becomes temporarily invisible and untouchable
-# but is not deleted; if you save the buffer in a file, the invisible
-# text is included in the file.  \\[widen] makes all visible again.
-# See also `save-restriction'.
-#
-# When calling from Lisp, pass two arguments START and END:
-# positions (integers or markers) bounding the text that should
-# remain visible.  */)
-#   (Lisp_Object start, Lisp_Object end)
-# {
-#   EMACS_INT s = fix_position (start), e = fix_position (end);
-#
-#   if (e < s)
-#     {
-#       EMACS_INT tem = s; s = e; e = tem;
-#     }
-#
-#   if (!(BEG <= s && s <= e && e <= Z))
-#     args_out_of_range (start, end);
-#
-#   if (BEGV != s || ZV != e)
-#     current_buffer->clip_changed = 1;
-#
-#   SET_BUF_BEGV (current_buffer, s);
-#   SET_BUF_ZV (current_buffer, e);
-#   if (PT < s)
-#     SET_PT (s);
-#   if (e < PT)
-#     SET_PT (e);
-#   /* Changing the buffer bounds invalidates any recorded current column.  */
-#   invalidate_current_column ();
-#   return Qnil;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("translate-region-internal", Ftranslate_region_internal,
+    #        Stranslate_region_internal, 3, 3, 0,
+    #        doc: /* Internal use only.
+    # From START to END, translate characters according to TABLE.
+    # TABLE is a string or a char-table; the Nth character in it is the
+    # mapping for the character with code N.
+    # It returns the number of characters changed.  */)
+    #   (Lisp_Object start, Lisp_Object end, Lisp_Object table)
+    # {
+    #   int translatable_chars = MAX_CHAR + 1;
+    #   bool multibyte = !NILP (BVAR (current_buffer, enable_multibyte_characters));
+    #   bool string_multibyte UNINIT;
+    #
+    #   validate_region (&start, &end);
+    #   if (STRINGP (table))
+    #     {
+    #       if (! multibyte)
+    #         table = string_make_unibyte (table);
+    #       translatable_chars = min (translatable_chars, SBYTES (table));
+    #       string_multibyte = STRING_MULTIBYTE (table);
+    #     }
+    #   else if (! (CHAR_TABLE_P (table)
+    #               && EQ (XCHAR_TABLE (table)->purpose, Qtranslation_table)))
+    #     error ("Not a translation table");
+    #
+    #   ptrdiff_t pos = XFIXNUM (start);
+    #   ptrdiff_t pos_byte = CHAR_TO_BYTE (pos);
+    #   ptrdiff_t end_pos = XFIXNUM (end);
+    #   modify_text (pos, end_pos);
+    #
+    #   ptrdiff_t characters_changed = 0;
+    #
+    #   while (pos < end_pos)
+    #     {
+    #       unsigned char *p = BYTE_POS_ADDR (pos_byte);
+    #       unsigned char *str UNINIT;
+    #       unsigned char buf[MAX_MULTIBYTE_LENGTH];
+    #       int len, oc;
+    #
+    #       if (multibyte)
+    #         oc = string_char_and_length (p, &len);
+    #       else
+    #         oc = *p, len = 1;
+    #       if (oc < translatable_chars)
+    #         {
+    #           int nc; /* New character.  */
+    #           int str_len UNINIT;
+    #           Lisp_Object val;
+    #
+    #           if (STRINGP (table))
+    #             {
+    #               /* Reload as signal_after_change in last iteration may GC.  */
+    #               unsigned char *tt = SDATA (table);
+    #
+    #               if (string_multibyte)
+    #                 {
+    #                   str = tt + string_char_to_byte (table, oc);
+    #                   nc = string_char_and_length (str, &str_len);
+    #                 }
+    #               else
+    #                 {
+    #                   nc = tt[oc];
+    #                   if (! ASCII_CHAR_P (nc) && multibyte)
+    #                     {
+    #                       str_len = BYTE8_STRING (nc, buf);
+    #                       str = buf;
+    #                     }
+    #                   else
+    #                     {
+    #                       str_len = 1;
+    #                       str = tt + oc;
+    #                     }
+    #                 }
+    #             }
+    #           else
+    #             {
+    #               nc = oc;
+    #               val = CHAR_TABLE_REF (table, oc);
+    #               if (CHARACTERP (val))
+    #                 {
+    #                   nc = XFIXNAT (val);
+    #                   str_len = CHAR_STRING (nc, buf);
+    #                   str = buf;
+    #                 }
+    #               else if (VECTORP (val) || (CONSP (val)))
+    #                 {
+    #                   /* VAL is [TO_CHAR ...] or (([FROM-CHAR ...] .  TO) ...)
+    #                      where TO is TO-CHAR or [TO-CHAR ...].  */
+    #                   nc = -1;
+    #                 }
+    #             }
+    #
+    #           if (nc != oc && nc >= 0)
+    #             {
+    #               /* Simple one char to one char translation.  */
+    #               if (len != str_len)
+    #                 {
+    #                   Lisp_Object string;
+    #
+    #                   /* This is less efficient, because it moves the gap,
+    #                      but it should handle multibyte characters correctly.  */
+    #                   string = make_multibyte_string ((char *) str, 1, str_len);
+    #                   replace_range (pos, pos + 1, string,
+    #                                  true, false, true, false, false);
+    #                   len = str_len;
+    #                 }
+    #               else
+    #                 {
+    #                   record_change (pos, 1);
+    #                   while (str_len-- > 0)
+    #                     *p++ = *str++;
+    #                   signal_after_change (pos, 1, 1);
+    #                   update_compositions (pos, pos + 1, CHECK_BORDER);
+    #                 }
+    #               characters_changed++;
+    #             }
+    #           else if (nc < 0)
+    #             {
+    #               if (CONSP (val))
+    #                 {
+    #                   val = check_translation (pos, pos_byte, end_pos, val);
+    #                   if (NILP (val))
+    #                     {
+    #                       pos_byte += len;
+    #                       pos++;
+    #                       continue;
+    #                     }
+    #                   /* VAL is ([FROM-CHAR ...] . TO).  */
+    #                   len = ASIZE (XCAR (val));
+    #                   val = XCDR (val);
+    #                 }
+    #               else
+    #                 len = 1;
+    #
+    #               Lisp_Object string
+    #                 = (VECTORP (val)
+    #                    ? Fconcat (1, &val)
+    #                    : Fmake_string (make_fixnum (1), val, Qnil));
+    #               replace_range (pos, pos + len, string, true, false, true, false,
+    #                              false);
+    #               pos_byte += SBYTES (string);
+    #               pos += SCHARS (string);
+    #               characters_changed += SCHARS (string);
+    #               end_pos += SCHARS (string) - len;
+    #               continue;
+    #             }
+    #         }
+    #       pos_byte += len;
+    #       pos++;
+    #     }
+    #
+    #   return make_fixnum (characters_changed);
+    # }
+    #
+    # DEFUN ("delete-region", Fdelete_region, Sdelete_region, 2, 2, "r",
+    #        doc: /* Delete the text between START and END.
+    # If called interactively, delete the region between point and mark.
+    # This command deletes buffer text without modifying the kill ring.  */)
+    #   (Lisp_Object start, Lisp_Object end)
+    # {
+    #   validate_region (&start, &end);
+    #   del_range (XFIXNUM (start), XFIXNUM (end));
+    #   return Qnil;
+    # }
+    #
+    # DEFUN ("delete-and-extract-region", Fdelete_and_extract_region,
+    #        Sdelete_and_extract_region, 2, 2, 0,
+    #        doc: /* Delete the text between START and END and return it.  */)
+    #   (Lisp_Object start, Lisp_Object end)
+    # {
+    #   validate_region (&start, &end);
+    #   if (XFIXNUM (start) == XFIXNUM (end))
+    #     return empty_unibyte_string;
+    #   return del_range_1 (XFIXNUM (start), XFIXNUM (end), 1, 1);
+    # }
+    # 
+    # DEFUN ("widen", Fwiden, Swiden, 0, 0, "",
+    #        doc: /* Remove restrictions (narrowing) from current buffer.
+    # This allows the buffer's full text to be seen and edited.  */)
+    #   (void)
+    # {
+    @DEFUN("widen", S.widen, 0, 0, 0)
+    @staticmethod
+    def widen():
+        #   if (BEG != BEGV || Z != ZV)
+        #     current_buffer->clip_changed = 1;
+        if BEG != G.BEGV or G.Z != G.ZV:
+            G.current_buffer.clip_changed = 1
+        #   BEGV = BEG;
+        G.BEGV = BEG
+        #   BEGV_BYTE = BEG_BYTE;
+        G.BEGV_BYTE = BEG_BYTE
+        #   SET_BUF_ZV_BOTH (current_buffer, Z, Z_BYTE);
+        SET_BUF_ZV_BOTH(G.current_buffer, G.Z, G.Z_BYTE)
+        #   /* Changing the buffer bounds invalidates any recorded current column.  */
+        #   invalidate_current_column ();
+        invalidate_current_column()
+        #   return Qnil;
+        return Q.nil
+    # }
+    #
+    # DEFUN ("narrow-to-region", Fnarrow_to_region, Snarrow_to_region, 2, 2, "r",
+    #        doc: /* Restrict editing in this buffer to the current region.
+    # The rest of the text becomes temporarily invisible and untouchable
+    # but is not deleted; if you save the buffer in a file, the invisible
+    # text is included in the file.  \\[widen] makes all visible again.
+    # See also `save-restriction'.
+    #
+    # When calling from Lisp, pass two arguments START and END:
+    # positions (integers or markers) bounding the text that should
+    # remain visible.  */)
+    #   (Lisp_Object start, Lisp_Object end)
+    # {
+    #   EMACS_INT s = fix_position (start), e = fix_position (end);
+    #
+    #   if (e < s)
+    #     {
+    #       EMACS_INT tem = s; s = e; e = tem;
+    #     }
+    #
+    #   if (!(BEG <= s && s <= e && e <= Z))
+    #     args_out_of_range (start, end);
+    #
+    #   if (BEGV != s || ZV != e)
+    #     current_buffer->clip_changed = 1;
+    #
+    #   SET_BUF_BEGV (current_buffer, s);
+    #   SET_BUF_ZV (current_buffer, e);
+    #   if (PT < s)
+    #     SET_PT (s);
+    #   if (e < PT)
+    #     SET_PT (e);
+    #   /* Changing the buffer bounds invalidates any recorded current column.  */
+    #   invalidate_current_column ();
+    #   return Qnil;
+    # }
 #
 # Lisp_Object
 # save_restriction_save (void)

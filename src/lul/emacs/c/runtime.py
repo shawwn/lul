@@ -11,6 +11,8 @@ true = True
 NULL = None
 gid_t = C.c_int
 
+ptrdiff_t = int
+
 
 def c_limits(c_int_type):
     signed = c_int_type(-1).value < c_int_type(0).value
@@ -69,6 +71,8 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 def mixin(cls: Type[U]):
+    if not isinstance(cls, type):
+        cls = type(cls)
     def inner(base: Type[T]) -> Type[U]:
         cls.__bases__ = (base, *cls.__bases__)
         return cls
@@ -102,17 +106,37 @@ class PP(Singleton):
 def c_define(name, value=None):
     setattr(PP, name, value)
 
+def c_defined(name):
+    return hasattr(PP, name)
+
 def c_undef(name):
     try:
         delattr(PP, name)
     except AttributeError:
         pass
 
+def c_ifdef(name):
+    return c_defined(name)
+
 def c_ifndef(name):
-    return not hasattr(PP, name)
+    return not c_defined(name)
 
 def assume(cond, globals, locals):
     pass
 
 def strlen(s):
     return len(s)
+
+def calloc(count: int, size: int):
+    return bytearray(count * size)
+
+def malloc(size: int):
+    v = calloc(1, size)
+    v[:] = b'\xFE' * size
+    return v
+
+def memset(dst: bytearray, dst_offset: int, val: int, size: int):
+    dst[dst_offset:dst_offset+size] = val
+
+def memcpy(dst: bytearray, dst_offset: int, src: Union[bytes, bytearray], src_offset: int, size: int):
+    dst[dst_offset:dst_offset+size] = src[src_offset:src_offset+size]

@@ -32,6 +32,8 @@ from .character import *
 from .lisp import *
 #
 # INLINE_HEADER_BEGIN
+
+from typing import TYPE_CHECKING
 #
 # /* Accessing the parameters of the current buffer.  */
 #
@@ -48,17 +50,24 @@ BEG = BEG_.BEG
 BEG_BYTE = BEG_.BEG_BYTE
 
 @mixin(G)
-class G:
+class G_:
     # /* Position of beginning of accessible range of buffer.  */
     # #define BEGV (current_buffer->begv)
     @classproperty
     def BEGV(self):
         return G.current_buffer.begv
+    @BEGV.setter
+    def BEGV(self, value):
+        G.current_buffer.begv = value
     BEGV: ClassVar[int]
+
     # #define BEGV_BYTE (current_buffer->begv_byte)
     @classproperty
     def BEGV_BYTE(self):
         return G.current_buffer.begv_byte
+    @BEGV_BYTE.setter
+    def BEGV_BYTE(self, value):
+        G.current_buffer.begv_byte = value
     BEGV_BYTE: ClassVar[int]
     #
     # /* Position of point in buffer.  The "+ 0" makes this
@@ -67,27 +76,53 @@ class G:
     @classproperty
     def PT(self):
         return G.current_buffer.pt
+    @PT.setter
+    def PT(self, value):
+        G.current_buffer.pt = value
     PT: ClassVar[int]
     # #define PT_BYTE (current_buffer->pt_byte + 0)
     @classproperty
     def PT_BYTE(self):
         return G.current_buffer.pt_byte
+    @PT_BYTE.setter
+    def PT_BYTE(self, value):
+        G.current_buffer.pt_byte = value
     PT_BYTE: ClassVar[int]
     #
     # /* Position of gap in buffer.  */
     # #define GPT (current_buffer->text->gpt)
+    @classproperty
+    def GPT(self):
+        return G.current_buffer.text.gpt
+    @GPT.setter
+    def GPT(self, value):
+        G.current_buffer.gpt = value
+    GPT: ClassVar[int]
     # #define GPT_BYTE (current_buffer->text->gpt_byte)
+    @classproperty
+    def GPT_BYTE(self):
+        return G.current_buffer.text.gpt_byte
+    @GPT_BYTE.setter
+    def GPT_BYTE(self, value):
+        G.current_buffer.gpt_byte = value
+    GPT_BYTE: ClassVar[int]
     #
     # /* Position of end of accessible range of buffer.  */
     # #define ZV (current_buffer->zv)
     @classproperty
     def ZV(self):
         return G.current_buffer.zv
+    @ZV.setter
+    def ZV(self, value):
+        G.current_buffer.zv = value
     ZV: ClassVar[int]
     # #define ZV_BYTE (current_buffer->zv_byte)
     @classproperty
     def ZV_BYTE(self):
         return G.current_buffer.zv_byte
+    @ZV_BYTE.setter
+    def ZV_BYTE(self, value):
+        G.current_buffer.zv_byte = value
     ZV_BYTE: ClassVar[int]
     #
     # /* Position of end of buffer.  */
@@ -95,11 +130,17 @@ class G:
     @classproperty
     def Z(self):
         return G.current_buffer.text.z
+    @Z.setter
+    def Z(self, value):
+        G.current_buffer.z = value
     Z: ClassVar[int]
     # #define Z_BYTE (current_buffer->text->z_byte)
     @classproperty
     def Z_BYTE(self):
         return G.current_buffer.text.z_byte
+    @Z_BYTE.setter
+    def Z_BYTE(self, value):
+        G.current_buffer.z_byte = value
     Z_BYTE: ClassVar[int]
     #
     # /* Macros for the addresses of places in the buffer.  */
@@ -131,9 +172,17 @@ class G:
     #
     # /* Address of beginning of gap in buffer.  */
     # #define GPT_ADDR (current_buffer->text->beg + current_buffer->text->gpt_byte - BEG_BYTE)
+    @classproperty
+    def GPT_ADDR(self):
+        return G.current_buffer.text.beg[G.current_buffer.text.gpt_byte - BEG_BYTE:]
+    GPT_ADDR: ClassVar[bytearray]
     #
     # /* Address of end of gap in buffer.  */
     # #define GAP_END_ADDR (current_buffer->text->beg + current_buffer->text->gpt_byte + current_buffer->text->gap_size - BEG_BYTE)
+    @classproperty
+    def GAP_END_ADDR(self):
+        return G.current_buffer.text.beg[G.current_buffer.text.gpt_byte + G.current_buffer.text.gap_size - BEG_BYTE:]
+    GAP_END_ADDR: ClassVar[bytearray]
     #
     # /* Address of end of accessible range of buffer.  */
     # #define ZV_ADDR (BYTE_POS_ADDR (current_buffer->zv_byte))
@@ -143,18 +192,53 @@ class G:
     #
     # /* Size of gap.  */
     # #define GAP_SIZE (current_buffer->text->gap_size)
+    @classproperty
+    def GAP_SIZE(self):
+        return G.current_buffer.text.gap_size
+    @GAP_SIZE.setter
+    def GAP_SIZE(self, value):
+        G.current_buffer.gap_size = value
+    GAP_SIZE: ClassVar[int]
     #
     # /* Modification count.  */
     # #define MODIFF (current_buffer->text->modiff)
+    @classproperty
+    def MODIFF(self):
+        return G.current_buffer.text.modiff
+    @MODIFF.setter
+    def MODIFF(self, value):
+        G.current_buffer.text.modiff = value
+    MODIFF: ClassVar[modiff_count]
     #
     # /* Character modification count.  */
     # #define CHARS_MODIFF (current_buffer->text->chars_modiff)
+    @classproperty
+    def CHARS_MODIFF(self):
+        return G.current_buffer.text.chars_modiff
+    @CHARS_MODIFF.setter
+    def CHARS_MODIFF(self, value):
+        G.current_buffer.text.chars_modiff = value
+    CHARS_MODIFF: ClassVar[modiff_count]
     #
     # /* Overlay modification count.  */
     # #define OVERLAY_MODIFF (current_buffer->text->overlay_modiff)
+    @classproperty
+    def OVERLAY_MODIFF(self):
+        return G.current_buffer.text.overlay_modiff
+    @OVERLAY_MODIFF.setter
+    def OVERLAY_MODIFF(self, value):
+        G.current_buffer.text.overlay_modiff = value
+    OVERLAY_MODIFF: ClassVar[modiff_count]
     #
     # /* Modification count as of last visit or save.  */
     # #define SAVE_MODIFF (current_buffer->text->save_modiff)
+    @classproperty
+    def SAVE_MODIFF(self):
+        return G.current_buffer.text.save_modiff
+    @SAVE_MODIFF.setter
+    def SAVE_MODIFF(self, value):
+        G.current_buffer.text.save_modiff = value
+    SAVE_MODIFF: ClassVar[modiff_count]
     # 
     #
     # /* Position of gap in buffer.  */
@@ -185,18 +269,33 @@ class G:
     #
     # /* Size of gap.  */
     # #define BUF_GAP_SIZE(buf) ((buf)->text->gap_size)
+    @staticmethod
+    def BUF_GAP_SIZE(buf: buffer):
+        return buf.text.gap_size
     #
     # /* Modification count.  */
     # #define BUF_MODIFF(buf) ((buf)->text->modiff)
+    @staticmethod
+    def BUF_MODIFF(buf: buffer):
+        return buf.text.modiff
     #
     # /* Character modification count.  */
     # #define BUF_CHARS_MODIFF(buf) ((buf)->text->chars_modiff)
+    @staticmethod
+    def BUF_CHARS_MODIFF(buf: buffer):
+        return buf.text.chars_modiff
     #
     # /* Modification count as of last visit or save.  */
     # #define BUF_SAVE_MODIFF(buf) ((buf)->text->save_modiff)
+    @staticmethod
+    def BUF_SAVE_MODIFF(buf: buffer):
+        return buf.text.save_modiff
     #
     # /* Overlay modification count.  */
     # #define BUF_OVERLAY_MODIFF(buf) ((buf)->text->overlay_modiff)
+    @staticmethod
+    def BUF_OVERLAY_MODIFF(buf: buffer):
+        return buf.text.overlay_modiff
     #
     # /* Modification count as of last auto-save.  */
     # /* FIXME: should we move this into ->text->auto_save_modiff?  */
@@ -204,24 +303,57 @@ class G:
     #
     # /* Compaction count.  */
     # #define BUF_COMPACT(buf) ((buf)->text->compact)
+    @staticmethod
+    def BUF_COMPACT(buf: buffer):
+        return buf.text.compact
     #
     # /* Marker chain of buffer.  */
     # #define BUF_MARKERS(buf) ((buf)->text->markers)
+    @staticmethod
+    def BUF_MARKERS(buf: buffer):
+        return buf.text.markers
     #
     # #define BUF_UNCHANGED_MODIFIED(buf) \
     #   ((buf)->text->unchanged_modified)
+    @staticmethod
+    def BUF_UNCHANGED_MODIFIED(buf: buffer):
+        return buf.text.unchanged_modified
     #
     # #define BUF_OVERLAY_UNCHANGED_MODIFIED(buf) \
     #   ((buf)->text->overlay_unchanged_modified)
+    @staticmethod
+    def BUF_OVERLAY_UNCHANGED_MODIFIED(buf: buffer):
+        return buf.text.overlay_unchanged_modified
     # #define BUF_BEG_UNCHANGED(buf) ((buf)->text->beg_unchanged)
+    @staticmethod
+    def BUF_BEG_UNCHANGED(buf: buffer):
+        return buf.text.beg_unchanged
     # #define BUF_END_UNCHANGED(buf) ((buf)->text->end_unchanged)
+    @staticmethod
+    def BUF_END_UNCHANGED(buf: buffer):
+        return buf.text.end_unchanged
     #
     # #define UNCHANGED_MODIFIED \
     #   BUF_UNCHANGED_MODIFIED (current_buffer)
+    @classproperty
+    def UNCHANGED_MODIFIED(self):
+        return G.BUF_UNCHANGED_MODIFIED(G.current_buffer)
     # #define OVERLAY_UNCHANGED_MODIFIED \
     #   BUF_OVERLAY_UNCHANGED_MODIFIED (current_buffer)
+    @classproperty
+    def OVERLAY_UNCHANGED_MODIFIED(self):
+        return G.BUF_OVERLAY_UNCHANGED_MODIFIED(G.current_buffer)
     # #define BEG_UNCHANGED BUF_BEG_UNCHANGED (current_buffer)
+    @classproperty
+    def BEG_UNCHANGED(self):
+        return G.BUF_BEG_UNCHANGED(G.current_buffer)
     # #define END_UNCHANGED BUF_END_UNCHANGED (current_buffer)
+    @classproperty
+    def END_UNCHANGED(self):
+        return G.BUF_END_UNCHANGED(G.current_buffer)
+
+G = G_()
+
 # 
 # /* Functions to set PT in the current buffer, or another buffer.  */
 #
@@ -248,6 +380,8 @@ class G:
 # {
 #   set_point_both (position, byte);
 # }
+def SET_PT_BOTH(position: ptrdiff_t, byte: ptrdiff_t):
+    set_point_both(position, byte)
 # INLINE void
 # TEMP_SET_PT_BOTH (ptrdiff_t position, ptrdiff_t byte)
 # {
@@ -315,32 +449,41 @@ class buffer_text:
     #                                  for this buffer.  It is incremented for
     #                                  each such event, and never otherwise
     #                                  changed.  */
+    modiff: modiff_count = 0
     #   modiff_count chars_modiff;        /* This is modified with character change
     #                                  events for this buffer.  It is set to
     #                                  modiff for each such event, and never
     #                                  otherwise changed.  */
+    chars_modiff: modiff_count = 0
     #   modiff_count save_modiff;        /* Previous value of modiff, as of last
     #                                  time buffer visited or saved a file.  */
+    save_modiff: modiff_count = 0
     #
     #   modiff_count overlay_modiff; /* Counts modifications to overlays.  */
+    overlay_modiff: modiff_count = 0
     #
     #   modiff_count compact;        /* Set to modiff each time when compact_buffer
     #                                  is called for this buffer.  */
+    compact: modiff_count = 0
     #
     #   /* Minimum value of GPT - BEG since last redisplay that finished.  */
     #   ptrdiff_t beg_unchanged;
+    beg_unchanged: modiff_count = 0
     #
     #   /* Minimum value of Z - GPT since last redisplay that finished.  */
     #   ptrdiff_t end_unchanged;
+    end_unchanged: ptrdiff_t = 0
     #
     #   /* MODIFF as of last redisplay that finished; if it matches MODIFF,
     #      beg_unchanged and end_unchanged contain no useful information.  */
     #   modiff_count unchanged_modified;
+    unchanged_modified: modiff_count = 0
     #
     #   /* BUF_OVERLAY_MODIFF of current buffer, as of last redisplay that
     #      finished; if it matches BUF_OVERLAY_MODIFF, beg_unchanged and
     #      end_unchanged contain no useful information.  */
     #   modiff_count overlay_unchanged_modified;
+    overlay_unchanged_modified: modiff_count = 0
     #
     #   /* Properties of this buffer's text.  */
     #   INTERVAL intervals;
@@ -359,9 +502,11 @@ class buffer_text:
     #      prevent Fgarbage_collect from shrinking the gap and losing
     #      not-yet-decoded bytes.  */
     #   bool_bf inhibit_shrinking : 1;
+    inhibit_shrinking: bool_bf = 0
     #
     #   /* True if it needs to be redisplayed.  */
     #   bool_bf redisplay : 1;
+    redisplay: bool_bf = 0
 #   };
 #
 # /* Most code should use this macro to access Lisp fields in struct buffer.  */
@@ -369,6 +514,8 @@ class buffer_text:
 # #define BVAR(buf, field) ((buf)->field ## _)
 def BVAR(buf: buffer, field: str):
     return getattr(buf, field + "_")
+def BVAR_SET(buf: buffer, field: str, value):
+    return setattr(buf, field + "_", value)
 #
 # /* Max number of builtin per-buffer variables.  */
 # enum { MAX_PER_BUFFER_VARS = 50 };
@@ -790,8 +937,7 @@ class buffer:
     # Lisp_Object undo_list_;
     def __repr__(self):
         if BUFFER_LIVE_P(self):
-            name = SDATA(self.name_).decode('utf-8')
-            return f'#<buffer {name}>'
+            return f'#<buffer {self.name_}>'
         else:
             return f'#<killed buffer>'
 # };
@@ -1103,12 +1249,18 @@ def bset_enable_multibyte_characters(b: buffer, val: Lisp_Object):
 #   buf->zv = charpos;
 #   buf->zv_byte = byte;
 # }
+def SET_BUF_ZV_BOTH(buf: buffer, charpos: int, byte: int):
+    buf.zv = charpos
+    buf.zv_byte = byte
 #
 # INLINE void
 # SET_BUF_PT_BOTH (struct buffer *buf, ptrdiff_t charpos, ptrdiff_t byte)
 # {
-#   buf->pt = charpos;
-#   buf->pt_byte = byte;
+def SET_BUF_PT_BOTH(buf: buffer, charpos: ptrdiff_t, byte: ptrdiff_t):
+    #   buf->pt = charpos;
+    buf.pt = charpos
+    #   buf->pt_byte = byte;
+    buf.pt_byte = byte
 # }
 #
 # /* Functions to access a character or byte in the current buffer,
@@ -1365,6 +1517,9 @@ def set_buffer_internal(b: buffer):
 #   eassert (b->text != NULL);
 #   return b->text->intervals;
 # }
+def buffer_intervals(b: buffer):
+    assert b.text != NULL
+    return b.text.intervals
 #
 # /* Set text properties of B to I.  */
 #

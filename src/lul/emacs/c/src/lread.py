@@ -1,8 +1,8 @@
-from .runtime import *
-
-@mixin(V)
-class V:
-    obarray: Lisp_Obarray
+# from .runtime import *
+#
+# @mixin(V)
+# class V:
+#     obarray: Lisp_Obarray
 
 # /* Lisp parsing and input streams.
 #
@@ -41,7 +41,9 @@ from .lisp import *
 # #include "dispextern.h"
 # #include "intervals.h"
 # #include "character.h"
+from .character import *
 # #include "buffer.h"
+from .buffer import *
 # #include "charset.h"
 # #include <epaths.h>
 # #include "commands.h"
@@ -60,6 +62,9 @@ from .lisp import *
 # #ifdef HAVE_NS
 # #include "nsterm.h"
 # #endif
+#
+from .alloc import *
+#
 #
 # #include <unistd.h>
 #
@@ -4371,7 +4376,7 @@ def check_obarray(obarray: Lisp_Object) -> Lisp_Obarray:
 # static Lisp_Object
 # intern_sym (Lisp_Object sym, Lisp_Object obarray, Lisp_Object index)
 # {
-def intern_sym(sym: Lisp_Object, obarray: Lisp_Object):
+def intern_sym(sym: Lisp_Object, obarray: Lisp_Obarray):
     #   Lisp_Object *ptr;
     #
     #   XSYMBOL (sym)->u.s.interned = (EQ (obarray, initial_obarray)
@@ -4400,6 +4405,7 @@ def intern_sym(sym: Lisp_Object, obarray: Lisp_Object):
     #   ptr = aref_addr (obarray, XFIXNUM (index));
     #   set_symbol_next (sym, SYMBOLP (*ptr) ? XSYMBOL (*ptr) : NULL);
     #   *ptr = sym;
+    obarray.append(sym)
     #   return sym;
     return sym
 
@@ -4436,11 +4442,11 @@ def intern_driver(string: Lisp_Object, obarray: Lisp_Object):
 # Lisp_Object
 # intern_c_string_1 (const char *str, ptrdiff_t len)
 # {
-def intern_c_string_1(s: str):
+def intern_c_string_1(str: str):
     #   Lisp_Object obarray = check_obarray (Vobarray);
     obarray = check_obarray(V.obarray)
     #   Lisp_Object tem = oblookup (obarray, str, len, len);
-    tem = oblookup(obarray, s)
+    tem = oblookup(obarray, str)
     #   if (!SYMBOLP (tem))
     #     {
     if not SYMBOLP(tem):
@@ -4450,9 +4456,13 @@ def intern_c_string_1(s: str):
         #     string = make_string (str, len);
         #   else
         #     string = make_pure_c_string (str, len);
+        if NILP(V.purify_flag):
+            string = make_string(str, len(str))
+        else:
+            string = make_pure_c_string(str, len(str))
         #
         #   tem = intern_driver (string, obarray, tem);
-        tem = intern_driver(s, obarray)
+        tem = intern_driver(string, obarray)
     #     }
     #   return tem;
     return tem
@@ -4461,11 +4471,13 @@ def intern_c_string_1(s: str):
 # static void
 # define_symbol (Lisp_Object sym, char const *str)
 # {
-def define_symbol(sym: Lisp_Object, name: str):
+def define_symbol(sym: Lisp_Object, str: str):
     #   ptrdiff_t len = strlen (str);
+    len = strlen(str)
     #   Lisp_Object string = make_pure_c_string (str, len);
+    string = make_pure_c_string(str, len)
     #   init_symbol (sym, string);
-    init_symbol(sym, name)
+    init_symbol(sym, string)
     #
     #   /* Qunbound is uninterned, so that it's not confused with any symbol
     #      'unbound' created by a Lisp program.  */
@@ -4816,10 +4828,16 @@ def init_obarray_once():
     G.initial_obarray = V.obarray
     # staticpro (&initial_obarray);
     #
+
+    Q.t.name = build_pure_c_string("t")
+    Q.nil.name = build_pure_c_string("nil")
+    Q.unbound.name = build_pure_c_string("unbound")
+    Q.variable_documentation.name = build_pure_c_string("variable-documentation")
+
     # for (int i = 0; i < ARRAYELTS (lispsym); i++)
     #   define_symbol (builtin_lisp_symbol (i), defsym_name[i]);
     for sym in G.lispsym: # type: Lisp_Symbol
-        define_symbol(sym, sym.name)
+        define_symbol(sym, sym.name.string) # TODO: we need to do this here
 
 
     # DEFSYM (Qunbound, "unbound");
@@ -4860,6 +4878,7 @@ def init_obarray_once():
 # defsubr (union Aligned_Lisp_Subr *aname)
 # {
 def defsubr(sname: Lisp_Subr):
+    print('defsubr', sname.symbol_name)
     #   struct Lisp_Subr *sname = &aname->s;
     #   Lisp_Object sym, tem;
     #   sym = intern_c_string (sname->symbol_name);

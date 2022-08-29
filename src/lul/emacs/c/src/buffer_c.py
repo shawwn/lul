@@ -1,6 +1,6 @@
-from .buffer import *
-from .alloc import *
-from .fns import *
+# from .buffer import *
+# from .alloc import *
+# from .fns import *
 # /* Buffer manipulation primitives for GNU Emacs.
 #
 # Copyright (C) 1985-1989, 1993-1995, 1997-2021 Free Software Foundation,
@@ -34,13 +34,16 @@ from .fns import *
 # #include <verify.h>
 #
 # #include "lisp.h"
+from .lisp import *
 # #include "intervals.h"
 # #include "process.h"
 # #include "systime.h"
 # #include "window.h"
 # #include "commands.h"
 # #include "character.h"
+from .character import *
 # #include "buffer.h"
+from .buffer import *
 # #include "region-cache.h"
 # #include "indent.h"
 # #include "blockinput.h"
@@ -48,6 +51,9 @@ from .fns import *
 # #include "frame.h"
 # #include "xwidget.h"
 # #include "pdumper.h"
+#
+from .fns import *
+from .insdel_c import *
 #
 # #ifdef WINDOWSNT
 # #include "w32heap.h"                /* for mmap_* */
@@ -411,53 +417,67 @@ def nsberror(spec: Lisp_Object):
         error("No buffer named %s", SDATA(spec))
     error("Invalid buffer argument")
 # 
-# DEFUN ("buffer-live-p", Fbuffer_live_p, Sbuffer_live_p, 1, 1, 0,
-#        doc: /* Return t if OBJECT is a buffer which has not been killed.
-# Value is nil if OBJECT is not a buffer or if it has been killed.  */)
-#   (Lisp_Object object)
-# {
-#   return ((BUFFERP (object) && BUFFER_LIVE_P (XBUFFER (object)))
-#           ? Qt : Qnil);
-# }
-#
-# DEFUN ("buffer-list", Fbuffer_list, Sbuffer_list, 0, 1, 0,
-#        doc: /* Return a list of all live buffers.
-# If the optional arg FRAME is a frame, return the buffer list in the
-# proper order for that frame: the buffers shown in FRAME come first,
-# followed by the rest of the buffers.  */)
-#   (Lisp_Object frame)
-# {
-#   Lisp_Object general;
-#   general = Fmapcar (Qcdr, Vbuffer_alist);
-#
-#   if (FRAMEP (frame))
-#     {
-#       Lisp_Object framelist, prevlist, tail;
-#
-#       framelist = Fcopy_sequence (XFRAME (frame)->buffer_list);
-#       prevlist = Fnreverse (Fcopy_sequence
-#                             (XFRAME (frame)->buried_buffer_list));
-#
-#       /* Remove from GENERAL any buffer that duplicates one in
-#          FRAMELIST or PREVLIST.  */
-#       tail = framelist;
-#       while (CONSP (tail))
-#         {
-#           general = Fdelq (XCAR (tail), general);
-#           tail = XCDR (tail);
-#         }
-#       tail = prevlist;
-#       while (CONSP (tail))
-#         {
-#           general = Fdelq (XCAR (tail), general);
-#           tail = XCDR (tail);
-#         }
-#
-#       return CALLN (Fnconc, framelist, general, prevlist);
-#     }
-#   else
-#     return general;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("buffer-live-p", Fbuffer_live_p, Sbuffer_live_p, 1, 1, 0,
+    #        doc: /* Return t if OBJECT is a buffer which has not been killed.
+    # Value is nil if OBJECT is not a buffer or if it has been killed.  */)
+    #   (Lisp_Object object)
+    # {
+    @DEFUN("buffer-live-p", S.buffer_live_p, 1, 1, 0)
+    @staticmethod
+    def buffer_live_p(object: Lisp_Object):
+        #   return ((BUFFERP (object) && BUFFER_LIVE_P (XBUFFER (object)))
+        #           ? Qt : Qnil);
+        return Q.t if BUFFERP(object) and BUFFER_LIVE_P(XBUFFER(object)) else Q.nil
+    # }
+    #
+    # DEFUN ("buffer-list", Fbuffer_list, Sbuffer_list, 0, 1, 0,
+    #        doc: /* Return a list of all live buffers.
+    # If the optional arg FRAME is a frame, return the buffer list in the
+    # proper order for that frame: the buffers shown in FRAME come first,
+    # followed by the rest of the buffers.  */)
+    #   (Lisp_Object frame)
+    # {
+    @DEFUN("buffer-list", S.buffer_list, 0, 1, 0)
+    @staticmethod
+    def buffer_list(frame: Lisp_Object = Q.nil):
+        #   Lisp_Object general;
+        #   general = Fmapcar (Qcdr, Vbuffer_alist);
+        general = F.mapcar(Q.cdr, V.buffer_alist)
+        #
+        #   if (FRAMEP (frame))
+        #     {
+        if FRAMEP(frame):
+            raise NotImplementedError("buffer-list FRAMEP(frame)")
+            #    Lisp_Object framelist, prevlist, tail;
+            #
+            #    framelist = Fcopy_sequence (XFRAME (frame)->buffer_list);
+            #    prevlist = Fnreverse (Fcopy_sequence
+            #                          (XFRAME (frame)->buried_buffer_list));
+            #
+            #    /* Remove from GENERAL any buffer that duplicates one in
+            #       FRAMELIST or PREVLIST.  */
+            #    tail = framelist;
+            #    while (CONSP (tail))
+            #      {
+            #        general = Fdelq (XCAR (tail), general);
+            #        tail = XCDR (tail);
+            #      }
+            #    tail = prevlist;
+            #    while (CONSP (tail))
+            #      {
+            #        general = Fdelq (XCAR (tail), general);
+            #        tail = XCDR (tail);
+            #      }
+            #
+            #    return CALLN (Fnconc, framelist, general, prevlist);
+            #  }
+            #else
+        else:
+            #  return general;
+            return general
+    # }
 #
 # /* Like Fassoc, but use Fstring_equal to compare
 #    (which ignores text properties), and don't ever quit.  */
@@ -2359,42 +2379,52 @@ class F:
 #     set_buffer_internal (XBUFFER (buffer));
 # }
 # 
-# DEFUN ("barf-if-buffer-read-only", Fbarf_if_buffer_read_only,
-#                                    Sbarf_if_buffer_read_only, 0, 1, 0,
-#        doc: /* Signal a `buffer-read-only' error if the current buffer is read-only.
-# If the text under POSITION (which defaults to point) has the
-# `inhibit-read-only' text property set, the error will not be raised.  */)
-#   (Lisp_Object position)
-# {
-#   if (NILP (position))
-#     XSETFASTINT (position, PT);
-#   else
-#     CHECK_FIXNUM (position);
-#
-#   if (!NILP (BVAR (current_buffer, read_only))
-#       && NILP (Vinhibit_read_only)
-#       && NILP (Fget_text_property (position, Qinhibit_read_only, Qnil)))
-#     xsignal1 (Qbuffer_read_only, Fcurrent_buffer ());
-#   return Qnil;
-# }
-# 
-# DEFUN ("erase-buffer", Ferase_buffer, Serase_buffer, 0, 0, "*",
-#        doc: /* Delete the entire contents of the current buffer.
-# Any narrowing restriction in effect (see `narrow-to-region') is removed,
-# so the buffer is truly empty after this.  */)
-#   (void)
-# {
-#   Fwiden ();
-#
-#   del_range (BEG, Z);
-#
-#   current_buffer->last_window_start = 1;
-#   /* Prevent warnings, or suspension of auto saving, that would happen
-#      if future size is less than past size.  Use of erase-buffer
-#      implies that the future text is not really related to the past text.  */
-#   XSETFASTINT (BVAR (current_buffer, save_length), 0);
-#   return Qnil;
-# }
+@mixin(F)
+class F:
+    # DEFUN ("barf-if-buffer-read-only", Fbarf_if_buffer_read_only,
+    #                                    Sbarf_if_buffer_read_only, 0, 1, 0,
+    #        doc: /* Signal a `buffer-read-only' error if the current buffer is read-only.
+    # If the text under POSITION (which defaults to point) has the
+    # `inhibit-read-only' text property set, the error will not be raised.  */)
+    #   (Lisp_Object position)
+    # {
+    #   if (NILP (position))
+    #     XSETFASTINT (position, PT);
+    #   else
+    #     CHECK_FIXNUM (position);
+    #
+    #   if (!NILP (BVAR (current_buffer, read_only))
+    #       && NILP (Vinhibit_read_only)
+    #       && NILP (Fget_text_property (position, Qinhibit_read_only, Qnil)))
+    #     xsignal1 (Qbuffer_read_only, Fcurrent_buffer ());
+    #   return Qnil;
+    # }
+    # 
+    # DEFUN ("erase-buffer", Ferase_buffer, Serase_buffer, 0, 0, "*",
+    #        doc: /* Delete the entire contents of the current buffer.
+    # Any narrowing restriction in effect (see `narrow-to-region') is removed,
+    # so the buffer is truly empty after this.  */)
+    #   (void)
+    # {
+    @DEFUN("erase-buffer", S.erase_buffer, 0, 0, 0)
+    @staticmethod
+    def erase_buffer():
+        #   Fwiden ();
+        F.widen()
+        #
+        #   del_range (BEG, Z);
+        del_range(BEG, G.Z)
+        #
+        #   current_buffer->last_window_start = 1;
+        G.current_buffer.last_window_start = 1
+        #   /* Prevent warnings, or suspension of auto saving, that would happen
+        #      if future size is less than past size.  Use of erase-buffer
+        #      implies that the future text is not really related to the past text.  */
+        #   XSETFASTINT (BVAR (current_buffer, save_length), 0);
+        BVAR_SET(G.current_buffer, "save_length", XSETFASTINT(0))
+        #   return Qnil;
+        return Q.nil
+    # }
 #
 # void
 # validate_region (Lisp_Object *b, Lisp_Object *e)
@@ -3748,10 +3778,14 @@ def validate_region(b: Lisp_Object, e: Lisp_Object):
 #   if (current_buffer->overlay_center >= pos)
 #     current_buffer->overlay_center += length;
 # }
+def adjust_overlays_for_insert(pos: ptrdiff_t, length: ptrdiff_t):
+    print("TODO: adjust_overlays_for_insert")
 #
 # void
 # adjust_overlays_for_delete (ptrdiff_t pos, ptrdiff_t length)
 # {
+def adjust_overlays_for_delete(pos: ptrdiff_t, length: ptrdiff_t):
+    print("TODO: adjust_overlays_for_delete")
 #   if (current_buffer->overlay_center < pos)
 #     /* The deletion was to our right.  No change needed; the before- and
 #        after-lists are still consistent.  */
