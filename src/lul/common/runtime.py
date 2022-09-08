@@ -789,6 +789,13 @@ def cdr(x):
 def eq(x, y):
     return x is y
 
+@eq.register(str)
+@eq.register(bytes)
+@eq.register(numbers.Number)
+def eqv(x, y):
+    return x == y
+
+
 @consp.register(tuple)
 def consp_tuple(x):
     return isinstance(x, tuple)
