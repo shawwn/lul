@@ -664,17 +664,28 @@ def dispatch(after=None, around=None):
         return wrapper
     return inner
 
+def prrepr(x):
+    return x if py.isinstance(x, str) else repr(x)
+
 def prcons(self):
+    if self.car == "quote":
+        return "'" + prrepr(car(cdr(self)))
+    if self.car == "unquote":
+        return "," + prrepr(car(cdr(self)))
+    if self.car == "unquote-splicing":
+        return ",@" + prrepr(car(cdr(self)))
+    if self.car == "quasiquote":
+        return "`" + prrepr(car(cdr(self)))
     s = []
     for tail in self:
         try:
-            s += [repr(car(tail))]
+            s += [prrepr(car(tail))]
         except CircularIteration:
             s += ["circular"]
         # if atom(cdr(tail)):
         it = cdr(tail)
         if not null(it) and not consp(it):
-            s += [".", repr(cdr(tail))]
+            s += [".", prrepr(cdr(tail))]
     return '(' + ' '.join(s) + ')'
 
 class Cons:
