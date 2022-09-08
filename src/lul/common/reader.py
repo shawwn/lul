@@ -19,9 +19,6 @@ class ReaderError(Exception):
 class EndOfFile(ReaderError):
     pass
 
-class InvalidSyntax(ReaderError):
-    pass
-
 def delimiter_p(c):
     return c and c in "\"()[]{};\r\n"
 
@@ -54,9 +51,9 @@ def looking_at(s, predicate):
     c = peek_char(s)
     return predicate(c) if callable(predicate) else c == predicate
 
-def stream(string: str, start=0, end=None, more=None, mode='lisp'):
+def stream(string: str, start=0, end=None, more=None, mode=None):
     end = len(string) if end is None else end
-    return [string, start, end, more, mode]
+    return [string, start, end, more, mode or "lisp"]
 
 def stream_item(s, idx, *val):
     if val:
@@ -107,8 +104,8 @@ def skip_non_code(s):
         else:
             break
 
-def read_from_string(string, start=0, end=None, more=None):
-    s = stream(string, start=start, end=end, more=more)
+def read_from_string(string, start=0, end=None, more=None, mode=None):
+    s = stream(string, start=start, end=end, more=more, mode=mode)
     return read(s), stream_pos(s)
 
 def read(s, eof=None, start=None):
@@ -121,7 +118,10 @@ def read(s, eof=None, start=None):
     elif c == "(":
         return read_list(s, "(", ")", start=start)
     elif c == "[":
-        return ["lit", "brackets", read_list(s, "[", "]", start=start)]
+        form = read_list(s, "[", "]", start=start)
+        if stream_mode(s) in ["bel", "arc"]:
+            return ["fn", ["_"], form]
+        return ["lit", "brackets", form]
     elif c == "{" and stream_mode(s) != "elisp":
         return ["lit", "braces", read_list(s, "{", "}", start=start)]
     elif c == "\"":
@@ -140,19 +140,8 @@ def read(s, eof=None, start=None):
             read_char(s)
             return wrap(s, "unquote-splicing", start=start)
         return wrap(s, "unquote", start=start)
-        # elif c == "\\": # bel char
-        #     read_char(s)
-        #     return ["lit", "char", read_char(s)]
-        # elif c == "?": # elisp char
-        #     read_char(s)
-        #     c1 = read_char(s)
-        #     if c1 == "\\":
-        #         c1 = read_char(s)
-        #     if c1 is None:
-        #         return expected(s, "char", start)
-        #     return ord(c1)
     elif closing_fn(s)(c):
-        raise InvalidSyntax(f"Unexpected {peek_char(s)!r} at {format_line_info(s, stream_pos(s))} from {format_line_info(s, start)}")
+        raise SyntaxError(f"Unexpected {peek_char(s)!r} at {format_line_info(s, stream_pos(s))} from {format_line_info(s, start)}")
     else:
         return read_atom(s)
 

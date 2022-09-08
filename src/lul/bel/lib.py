@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
+
 from .runtime import *
+import json
 
 import __main__ as G
 
@@ -128,8 +131,8 @@ vmark = join("%vmark")
 
 # (def uvar ()
 #   (list vmark))
-def uvar():
-    return list(vmark)
+def uvar(*name):
+    return list(vmark, *name)
 
 # (mac do args
 #   (reduce (fn (x y)
@@ -139,6 +142,11 @@ def uvar():
 def do(*args):
     return reduce(lambda x, y: list(list(quote("fn"), uvar(), y), x),
                   args)
+
+def do_f(x, *args):
+    for f in args:
+        x = f(x)
+    return x
 
 # (mac let (parms val . body)
 #   `((fn (,parms) ,@body) ,val))
@@ -158,10 +166,17 @@ def macro(*args):
 
 # (mac def (n . rest)
 #   `(set ,n (fn ,@rest)))
-#
+@macro_
+def def_(n, *rest):
+    return list(quote("set"), n, list(quote("fn"), *rest))
+globals()["def"] = def_
+
 # (mac mac (n . rest)
 #   `(set ,n (macro ,@rest)))
-#
+@macro_
+def mac(n, *rest):
+    return list(quote("set"), n, list(quote("macro"), *rest))
+
 # (mac or args
 #   (if (no args)
 #       nil
@@ -401,7 +416,19 @@ def rem(x, ys, f=unset):
 def get(k, kvs, f=unset):
     if f is unset:
         f = equal
-    return find(lambda _: f(car(_), k), kvs)
+    if null(kvs):
+        return kvs
+    if isinstance(kvs, Cons):
+        return find(lambda _: f(car(_), k), kvs)
+    assert f in [equal, id]
+    # if isinstance(kvs, dict):
+    #     return join(k, kvs[k]) if k in kvs else nil
+    # return join(k, getattr(kvs, k)) if hasattr(kvs, k) else nil
+    out = Cell(kvs, k, unset)
+    if cdr(out) is unset:
+        return nil
+    return out
+
 
 # (def put (k v kvs (o f =))
 #   (cons (cons k v)
@@ -457,6 +484,52 @@ def is_(x):
 #          (if (caris ,w ,v id)
 #              (let ,var (cdr ,w) ,fail)
 #              (let ,var ,w ,ok))))))
+@macro_
+def eif(var, expr=unset, fail=unset, ok=unset):
+    if expr is unset:
+        expr = nil
+    if fail is unset:
+        fail = nil
+    if ok is unset:
+        ok = nil
+    v = uvar(quote("v"))
+    w = uvar(quote("w"))
+    c = uvar(quote("c"))
+    return list(quote("let"), v, list(quote("join")),
+                list(quote("let"), w, list(quote("ccc"), list(quote("fn"), list(c),
+                                                              list(quote("dyn"), quote("err"),
+                                                                   list(quote("fn"), list(quote("_")),
+                                                                        list(c),
+                                                                        list(quote("cons"), v, quote("_"))),
+                                                                   expr))),
+                     list(quote("if"), list(quote("caris"), w, v, quote("id")),
+                          list(quote("let"), var, list(quote("cdr"), w), fail),
+                          list(quote("let"), var, w, ok))))
+
+
+
+# (mac fn (parms . body)
+#   (if (no (cdr body))
+#       `(list 'lit 'clo scope ',parms ',(car body))
+#       `(list 'lit 'clo scope ',parms '(do ,@body))))
+@macro_
+def fn(parms, *body):
+    if no(cdr(body)):
+        return list(quote("list"),
+                    list(quote("quote"), quote("lit")),
+                    list(quote("quote"), quote("clo")),
+                    quote("scope"),
+                    list(quote("quote"), parms),
+                    list(quote("quote"), car(body)))
+    else:
+        return list(quote("list"),
+                    list(quote("quote"), quote("lit")),
+                    list(quote("quote"), quote("clo")),
+                    quote("scope"),
+                    list(quote("quote"), parms),
+                    list(quote("quote"), list(quote("do"), *body)))
+
+
 #
 # (mac onerr (e1 e2)
 #   (let v (uvar)
@@ -481,8 +554,22 @@ def literal(e):
         return t
     elif callable(e):
         return t
+    elif string_literal_p(e):
+        return t
     else:
         return string(e)
+
+def string_literal_p(e):
+    if not isinstance(e, str):
+        return False
+    if len(e) <= 0:
+        return False
+    return e[0].isdigit() or (e.startswith('"') and e.endswith('"'))
+
+def evliteral(e):
+    if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
+        return json.loads(e)
+    return e
 
 # (def variable (e)
 #   (if (atom e)
@@ -503,14 +590,18 @@ def isa(name):
 #   (ev (list (list e nil))
 #       nil
 #       (list nil g)))
-def bel(e, g=unset):
+def bel(e, g=unset, a=unset):
+    if a is unset:
+        # a = nil
+        a = G.__dict__
     if g is unset:
         # g = globe()
         # g = nil
         # g = {**py.__dict__, **globals()}
         # g = XCONS(globals())
-        g = append(XCONS(G.__dict__), XCONS(globals()))
-    return ev(list(list(e, nil)),
+        # g = append(XCONS(G.__dict__), XCONS(globals()))
+        g = globals()
+    return ev(list(list(e, a)),
               nil,
               list(nil, g))
 
@@ -551,7 +642,7 @@ def sched(sr_p, g):
 def ev(ea_s, r, m):
     e, a, s = car(car(ea_s)), cadr(car(ea_s)), cdr(ea_s)
     if yes(literal(e)):
-        return mev(s, cons(e, r), m)
+        return mev(s, cons(evliteral(e), r), m)
     elif yes(variable(e)):
         return vref(e, a, s, r, m)
     elif no(proper(e)):
@@ -580,8 +671,14 @@ def vref(v, a, s, r, m):
     if inwhere(s):
         if yes(it := or_f(lambda: lookup(v, a, s, g),
                           lambda: and_f(lambda: car(inwhere(s)),
-                                        lambda: (lambda cell: (lambda a, b: b)(xdr(g, cons(cell, cdr(g))), cell))(
-                                            cons(v, nil))))):
+                                        lambda: gset(v, nil, g)))):
+            # lambda: [cell := cons(v, nil),
+            #          xdr(g, cons(cell, cdr(g))),
+            #          cell][-1]))):
+            #     lambda cell: ([xdr(g, cons(cell, cdr(g)))] and cell))
+            # # (lambda cell: (lambda a, b: b)(xdr(g, cons(cell, cdr(g))), cell))(
+            # #     cons(v, nil))
+            # ))):
             return mev(cdr(s), cons(list(it, quote("d")), r), m)
         else:
             if yes(it := lookup(v, a, s, g)):
@@ -593,6 +690,17 @@ def vref(v, a, s, r, m):
             return mev(s, cons(cdr(it), r), m)
         else:
             return sigerr(list(quote("unboundb"), v), s, r, m)
+
+def gset(k, v, kvs):
+    assert not null(kvs)
+    if consp(kvs):
+        cell = cons(k, v)
+        xdr(kvs, cons(cell, cdr(kvs)))
+    else:
+        cell = Cell(kvs, k, nil)
+        xdr(cell, v)
+    #return list(cell, quote("d"))
+    return cell
 
 # (set smark (join))
 smark = join("%smark")
@@ -1019,7 +1127,7 @@ def loc_is_cdr(f, args, a, s, r, m):
 # (def okenv (a)
 #   (and (proper a) (all pair a)))
 def okenv(a):
-    return yes(proper(a)) and all(pair, a)
+    return yes(proper(a)) and all(pair, a) or isinstance(a, dict)
 
 # (def okstack (s)
 #   (and (proper s)
@@ -1399,10 +1507,10 @@ def vec2list(v):
     if py.isinstance(v, py.list):
         if len(v) >= 3 and v[-2] == ".":
             l = vec2list(v[0:-2])
-            l.cdr = vec2list(v[-1])
+            xdr(l, vec2list(v[-1]))
             return l
         return list(*[vec2list(x) for x in v])
-    return v
+    return quote(v)
 
 # from lul.common import reader
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
@@ -1415,3 +1523,94 @@ def readbel(string):
 # (<function join at 0x105a02a60> . <function join at 0x105a02a60>)
 # >>> bel( readbel("(join join join)"), map(lambda _: cons(_, list(quote("lit"), quote("prim"), _)), apply(append, prims)))
 # ((lit prim join) lit prim join)
+
+def repl():
+    buf = ""
+    def clear():
+        nonlocal buf
+        buf = ""
+        print("> ", end="", flush=True)
+    clear()
+    more = object()
+    while True:
+        try:
+            line = sys.stdin.readline()
+            if line == '': # EOF
+                break
+            buf += line
+            form, pos = reader.read_from_string(buf, more=more)
+            if form is more:
+                continue
+            print(json.dumps(form))
+            clear()
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+            clear()
+
+
+import code
+import codeop
+
+class BelCommandCompiler(codeop.CommandCompiler):
+    def __call__(self, source, filename="<input>", symbol="single"):
+        more = object()
+        form, pos = reader.read_from_string(source, more=more)
+        if form is more:
+            return None
+        return form
+
+
+class BelConsole(code.InteractiveConsole):
+    def __init__(self, locals=None, filename="<console>"):
+        super().__init__(locals=locals, filename=filename)
+        self.compile = BelCommandCompiler()
+
+    def runcode(self, form) -> None:
+        print(json.dumps(form))
+        print(repr(result := bel(expr := vec2list(form))))
+
+
+    # def runsource(self, source: str, filename: str = "<input>", symbol: str = "single") -> bool:
+    #     more = object()
+    #     form, pos = reader.read_from_string(source, more=more)
+    #     if form is more:
+    #         return True
+    #     print(json.dumps(form))
+    #     return False
+
+
+@contextlib.contextmanager
+def letattr(obj, key, val, *default):
+    prev = getattr(obj, key, *default)
+    setattr(obj, key, val)
+    try:
+        yield
+    finally:
+        setattr(obj, key, prev)
+
+def interact(banner=None, readfunc=None, local=None, exitmsg=None):
+    """Closely emulate the interactive Python interpreter.
+
+    This is a backwards compatible interface to the InteractiveConsole
+    class.  When readfunc is not specified, it attempts to import the
+    readline module to enable GNU readline if it is available.
+
+    Arguments (all optional, all default to None):
+
+    banner -- passed to InteractiveConsole.interact()
+    readfunc -- if not None, replaces InteractiveConsole.raw_input()
+    local -- passed to InteractiveInterpreter.__init__()
+    exitmsg -- passed to InteractiveConsole.interact()
+
+    """
+    console = BelConsole(local)
+    if readfunc is not None:
+        console.raw_input = readfunc
+    else:
+        try:
+            import readline
+        except ImportError:
+            pass
+    with letattr(sys, 'ps1', '> ', '>>> '):
+        with letattr(sys, 'ps2', '  ', '... '):
+            console.interact(banner, exitmsg)

@@ -668,14 +668,15 @@ def prrepr(x):
     return x if py.isinstance(x, str) else repr(x)
 
 def prcons(self):
-    if self.car == "quote":
-        return "'" + prrepr(car(cdr(self)))
-    if self.car == "unquote":
-        return "," + prrepr(car(cdr(self)))
-    if self.car == "unquote-splicing":
-        return ",@" + prrepr(car(cdr(self)))
-    if self.car == "quasiquote":
-        return "`" + prrepr(car(cdr(self)))
+    if consp(self.cdr):
+        if car(self) == "quote":
+            return "'" + prrepr(car(cdr(self)))
+        if car(self) == "unquote":
+            return "," + prrepr(car(cdr(self)))
+        if car(self) == "unquote-splicing":
+            return ",@" + prrepr(car(cdr(self)))
+        if car(self) == "quasiquote":
+            return "`" + prrepr(car(cdr(self)))
     s = []
     for tail in self:
         try:
@@ -689,11 +690,35 @@ def prcons(self):
     return '(' + ' '.join(s) + ')'
 
 class Cons:
-    def __init__(self, car, cdr, set_car=None, set_cdr=None):
-        self.car = car
-        self.cdr = cdr
+    def __init__(self, car=None, cdr=None, set_car=None, set_cdr=None, get_car=None, get_cdr=None):
+        self.car_ = car
+        self.cdr_ = cdr
         self.set_car = set_car
         self.set_cdr = set_cdr
+        self.get_car = get_car
+        self.get_cdr = get_cdr
+
+    @property
+    def car(self):
+        return self.get_car() if self.get_car else self.car_
+
+    @property
+    def cdr(self):
+        return self.get_cdr() if self.get_cdr else self.cdr_
+
+    @car.setter
+    def car(self, value):
+        if self.set_car:
+            self.set_car(value)
+        else:
+            self.car_ = value
+
+    @cdr.setter
+    def cdr(self, value):
+        if self.set_cdr:
+            self.set_cdr(value)
+        else:
+            self.cdr_ = value
 
     def __iter__(self):
         tortoise = self
@@ -736,6 +761,23 @@ class Cons:
             n += 1
         return n
 
+class Cell(Cons):
+    def __init__(self, kvs, k, *default):
+        def get_cdr():
+            if isinstance(kvs, dict):
+                return kvs.get(self.car, *default)
+            else:
+                assert not consp(kvs)
+                return getattr(kvs, k, *default)
+        def set_cdr(v):
+            if isinstance(kvs, dict):
+                kvs[self.car] = v
+            else:
+                assert not consp(kvs)
+                setattr(kvs, k, v)
+        super().__init__(car=k, get_cdr=get_cdr, set_cdr=set_cdr)
+
+
 @dispatch()
 def XCONS(x):
     assert isinstance(x, Cons)
@@ -776,6 +818,10 @@ def numberp(x):
         return False
     else:
         return isinstance(x, (int, float))
+
+@dispatch()
+def dictp(x):
+    return isinstance(x, std.Mapping)
 
 @dispatch()
 def car(x):

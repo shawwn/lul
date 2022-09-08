@@ -38,23 +38,27 @@ def type(x):
         return sym("pair")
     elif numberp(x):
         return sym("number")
+    elif dictp(x):
+        return sym("tab")
     else:
         return sym("symbol")
 
 def xar(x, y):
     assert consp(x)
-    if x.set_car:
-        x.set_car(y)
-    else:
-        x.car = y
+    # if x.set_car:
+    #     x.set_car(y)
+    # else:
+    #     x.car = y
+    x.car = y
     return y
 
 def xdr(x, y):
     assert consp(x)
-    if x.set_cdr:
-        x.set_cdr(y)
-    else:
-        x.cdr = y
+    # if x.set_cdr:
+    #     x.set_cdr(y)
+    # else:
+    #     x.cdr = y
+    x.cdr = y
     return y
 
 def sym(x):
