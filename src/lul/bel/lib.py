@@ -1394,3 +1394,16 @@ sys.setrecursionlimit(10_000)
 # >>> bel(list("dyn", "err", list("fn", list("x"), list("do", list("print", "x"), list("quote", "hello"))), list("car", list("quote", "b"))))
 # 'str' object has no attribute 'car'
 # 'hello'
+
+def vec2list(v):
+    if py.isinstance(v, py.list):
+        if len(v) >= 3 and v[-2] == ".":
+            l = vec2list(v[0:-2])
+            l.cdr = vec2list(v[-1])
+            return l
+        return list(*[vec2list(x) for x in v])
+    return v
+
+# from lul.common import reader
+# belforms = reader.read_all(reader.stream(open("bel.bel").read()))
+# [print(repr(x.car)) for x in vec2list(belforms)]
