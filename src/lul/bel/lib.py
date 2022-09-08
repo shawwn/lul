@@ -1407,3 +1407,11 @@ def vec2list(v):
 # from lul.common import reader
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
 # [print(repr(x.car)) for x in vec2list(belforms)]
+
+def readbel(string):
+    return vec2list(reader.read_from_string(string)[0])
+
+# >>> bel( readbel("(join join join)"))
+# (<function join at 0x105a02a60> . <function join at 0x105a02a60>)
+# >>> bel( readbel("(join join join)"), map(lambda _: cons(_, list(quote("lit"), quote("prim"), _)), apply(append, prims)))
+# ((lit prim join) lit prim join)
