@@ -623,7 +623,7 @@ def bel(e, g=unset, a=unset):
 #                  (cons (list s r) p)
 #                  (snoc p (list s r)))
 #              g)))
-def mev(s, r, pg):
+def mev_(s, r, pg):
     p, g = car(pg), cadr(pg)
     if no(s):
         if yes(p):
@@ -635,6 +635,30 @@ def mev(s, r, pg):
                      if yes(cdr(binding(quote("lock"), s))) else
                      snoc(p, list(s, r)),
                      g)
+
+mev_tail = CV.ContextVar[bool]("mev_tail", default=False)
+
+class JumpToMev(Exception):
+    def __init__(self, s, r, pg):
+        self.s = s
+        self.r = r
+        self.pg = pg
+
+def mev(s, r, pg):
+    if mev_tail.get():
+        raise JumpToMev(s, r, pg)
+    else:
+        reset = mev_tail.set(True)
+        try:
+            while True:
+                try:
+                    return mev_(s, r, pg)
+                except JumpToMev as e:
+                    s = e.s
+                    r = e.r
+                    pg = e.pg
+        finally:
+            mev_tail.reset(reset)
 
 # (def sched (((s r) . p) g)
 #   (ev s r (list p g)))
