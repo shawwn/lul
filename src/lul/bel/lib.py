@@ -1528,6 +1528,16 @@ def set(*args):
 
 
 globals()["print"] = print
+globals()["."] = lambda *args: cdr(get(*args))
+globals()["+"] = operator.add
+globals()["-"] = operator.sub
+globals()["*"] = operator.mul
+globals()["/"] = operator.truediv
+globals()["//"] = operator.floordiv
+eval = eval
+exec = exec
+compile = compile
+
 import sys
 sys.setrecursionlimit(10_000)
 
