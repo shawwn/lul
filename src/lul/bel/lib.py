@@ -1587,12 +1587,10 @@ import codeop
 
 class BelCommandCompiler(codeop.CommandCompiler):
     def __call__(self, source, filename="<input>", symbol="single"):
-        more = object()
-        form, pos = reader.read_from_string(source, more=more)
+        form, pos = reader.read_from_string(source, more=(more := object()))
         if form is more:
             return None
         return form
-
 
 class BelConsole(code.InteractiveConsole):
     def __init__(self, locals=None, filename="<console>"):
@@ -1600,17 +1598,8 @@ class BelConsole(code.InteractiveConsole):
         self.compile = BelCommandCompiler()
 
     def runcode(self, form) -> None:
-        print(json.dumps(form))
+        # print(json.dumps(form))
         print(repr(result := bel(expr := vec2list(form))))
-
-
-    # def runsource(self, source: str, filename: str = "<input>", symbol: str = "single") -> bool:
-    #     more = object()
-    #     form, pos = reader.read_from_string(source, more=more)
-    #     if form is more:
-    #         return True
-    #     print(json.dumps(form))
-    #     return False
 
 
 @contextlib.contextmanager
