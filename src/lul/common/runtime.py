@@ -762,21 +762,25 @@ class Cons:
         return n
 
 class Cell(Cons):
-    def __init__(self, kvs, k, *default):
-        def get_cdr():
-            if isinstance(kvs, dict):
-                return kvs.get(self.car, *default)
-            else:
-                assert not consp(kvs)
-                return getattr(kvs, k, *default)
-        def set_cdr(v):
-            if isinstance(kvs, dict):
-                kvs[self.car] = v
-            else:
-                assert not consp(kvs)
-                setattr(kvs, k, v)
-        super().__init__(car=k, get_cdr=get_cdr, set_cdr=set_cdr)
-
+    def __init__(self, kvs, k, *default, get_car=None, set_car=None, get_cdr=None, set_cdr=None):
+        if get_cdr is None:
+            def get_cdr():
+                if isinstance(kvs, std.Mapping):
+                    return kvs.get(self.car, *default)
+                else:
+                    assert not consp(kvs)
+                    return getattr(kvs, k, *default)
+        if set_cdr is None:
+            def set_cdr(v):
+                if isinstance(kvs, std.Mapping):
+                    if isinstance(kvs, std.MutableMapping):
+                        kvs[self.car] = v
+                    else:
+                        raise Error("Can't update non-mutable mapping")
+                else:
+                    assert not consp(kvs)
+                    setattr(kvs, k, v)
+        super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
 
 @dispatch()
 def XCONS(x):
@@ -796,17 +800,33 @@ def XCONS_tuple(x, set_car=None, set_cdr=None):
     else:
         return nil
 
-@XCONS.register(dict)
-def XCONS_dict(x):
+# @XCONS.register(dict)
+# def XCONS_dict(x):
+#     def set_car(v):
+#         raise Error("Can't set frozen cell")
+#     def make_set_cdr(k):
+#         def set_cdr(v):
+#             x[k] = v
+#             return v
+#         return set_cdr
+#     # return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()))
+#     return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()), set_car, set_car)
+
+@XCONS.register(std.Mapping)
+def XCONS_dict(kvs: dict):
     def set_car(v):
-        raise Error("Can't set frozen cell")
-    def make_set_cdr(k):
-        def set_cdr(v):
-            x[k] = v
-            return v
-        return set_cdr
-    # return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()))
-    return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()), set_car, set_car)
+        raise Error("Can't set frozen car")
+    def set_cdr(v):
+        raise Error("Can't set frozen cdr")
+    return XCONS_tuple(tuple(Cell(kvs, k, set_car=set_car, set_cdr=set_cdr) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
+
+@XCONS.register(std.MutableMapping)
+def XCONS_dict(kvs: dict):
+    def set_car(v):
+        raise Error("Can't set frozen car")
+    def set_cdr(v):
+        raise Error("Can't set frozen cdr")
+    return XCONS_tuple(tuple(Cell(kvs, k, set_car=set_car) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
 
 @dispatch()
 def consp(x):

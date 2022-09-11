@@ -35,29 +35,21 @@ def join(x=nil, y=nil):
 
 def type(x):
     if consp(x):
-        return sym("pair")
+        return quote("pair")
     elif numberp(x):
-        return sym("number")
+        return quote("number")
     elif dictp(x):
-        return sym("tab")
+        return quote("table")
     else:
-        return sym("symbol")
+        return quote("symbol")
 
 def xar(x, y):
     assert consp(x)
-    # if x.set_car:
-    #     x.set_car(y)
-    # else:
-    #     x.car = y
     x.car = y
     return y
 
 def xdr(x, y):
     assert consp(x)
-    # if x.set_cdr:
-    #     x.set_cdr(y)
-    # else:
-    #     x.cdr = y
     x.cdr = y
     return y
 

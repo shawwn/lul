@@ -419,7 +419,15 @@ def get(k, kvs, f=unset):
     if null(kvs):
         return kvs
     if isinstance(kvs, Cons):
-        return find(lambda _: f(car(_), k), kvs)
+        # return find(lambda _: f(car(_), k), kvs)
+        for tail in kvs:
+            x = car(tail)
+            if f(car(x), k):
+                return x
+        if dictp(it := cdr(kvs[-1])):
+            kvs = it
+        else:
+            return nil
     assert f in [equal, id]
     # if isinstance(kvs, dict):
     #     return join(k, kvs[k]) if k in kvs else nil
@@ -593,6 +601,7 @@ def isa(name):
 def bel(e, g=unset, a=unset):
     if a is unset:
         # a = nil
+        # a = XCONS(G.__dict__)
         a = G.__dict__
     if g is unset:
         # g = globe()
@@ -1127,7 +1136,8 @@ def loc_is_cdr(f, args, a, s, r, m):
 # (def okenv (a)
 #   (and (proper a) (all pair a)))
 def okenv(a):
-    return yes(proper(a)) and all(pair, a) or isinstance(a, dict)
+    # return yes(proper(a)) and all(pair, a)
+    return True
 
 # (def okstack (s)
 #   (and (proper s)
