@@ -1538,8 +1538,8 @@ eval = eval
 exec = exec
 compile = compile
 
-import sys
-sys.setrecursionlimit(10_000)
+# import sys
+# sys.setrecursionlimit(10_000)
 
 # >>> bel(list("join", 1, 2), map(lambda _: cons(_, list(quote("lit"), quote("prim"), _)), apply(append, prims)))
 # (1 . 2)
