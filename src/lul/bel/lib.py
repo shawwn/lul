@@ -1597,7 +1597,7 @@ import codeop
 
 class BelCommandCompiler(codeop.CommandCompiler):
     def __call__(self, source, filename="<input>", symbol="single"):
-        form, pos = reader.read_from_string(source, more=(more := object()))
+        form, pos = reader.read_from_string(source, more=(more := object()), mode="bel")
         if form is more:
             return None
         return form
