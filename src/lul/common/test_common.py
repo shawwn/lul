@@ -1,5 +1,5 @@
 import unittest
-import lul.common as lib
+from .. import common as lib
 
 
 class CommonTest(unittest.TestCase):
