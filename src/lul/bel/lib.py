@@ -209,6 +209,7 @@ def and_(*args):
     if no(args):
         return t
     else:
+        x = nil
         for x in args:
             if no(x):
                 return nil
@@ -218,6 +219,7 @@ def and_f(*args):
     if no(args):
         return t
     else:
+        x = nil
         for f in args:
             x = f()
             if no(x):
