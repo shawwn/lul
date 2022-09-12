@@ -856,7 +856,7 @@ def form_(name):
 # (form quote ((e) a s r m)
 #   (mev s (cons e r) m))
 @form_("quote")
-def quote_(es, a, s, r, m):
+def quote_(es, _a, s, r, m):
     e = car(es)
     return mev(s, cons(e, r), m)
 
@@ -1152,18 +1152,18 @@ def loc_(test):
 # (loc (is car) (f args a s r m)
 #   (mev (cdr s) (cons (list (car args) 'a) r) m))
 @loc_(is_(car))
-def loc_is_car(f, args, a, s, r, m):
+def loc_is_car(_f, args, _a, s, r, m):
     return mev(cdr(s), cons(list(car(args), quote("a")), r), m)
 
 # (loc (is cdr) (f args a s r m)
 #   (mev (cdr s) (cons (list (car args) 'd) r) m))
 @loc_(is_(cdr))
-def loc_is_cdr(f, args, a, s, r, m):
+def loc_is_cdr(_f, args, _a, s, r, m):
     return mev(cdr(s), cons(list(car(args), quote("d")), r), m)
 
 # (def okenv (a)
 #   (and (proper a) (all pair a)))
-def okenv(a):
+def okenv(_a):
     # return yes(proper(a)) and all(pair, a)
     return True
 
@@ -1260,13 +1260,13 @@ def applyprim(f, args, s, r, m):
                            quote("xdr"), lambda: xdr(a, b),
                            quote("sym"), lambda: sym(a),
                            quote("nom"), lambda: nom(a),
-                           quote("wrb"), lambda: wrb(a, b),
-                           quote("rdb"), lambda: rdb(a),
-                           quote("ops"), lambda: ops(a, b),
-                           quote("cls"), lambda: cls(a),
-                           quote("stat"), lambda: stat(a),
-                           quote("coin"), lambda: coin(),
-                           quote("sys"), lambda: sys(a),
+                           # quote("wrb"), lambda: wrb(a, b),
+                           # quote("rdb"), lambda: rdb(a),
+                           # quote("ops"), lambda: ops(a, b),
+                           # quote("cls"), lambda: cls(a),
+                           # quote("stat"), lambda: stat(a),
+                           # quote("coin"), lambda: coin(),
+                           # quote("sys"), lambda: sys(a),
                            quote("print"), lambda: print(a),
                            lambda: sigerr(quote("bad-prim"), s, r, m))
             except Exception as v:
