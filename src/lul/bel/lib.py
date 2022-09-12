@@ -1610,10 +1610,15 @@ class BelConsole(code.InteractiveConsole):
     def __init__(self, locals=None, filename="<console>"):
         super().__init__(locals=locals, filename=filename)
         self.compile = BelCommandCompiler()
+        self.that = nil
+        self.thatexpr = nil
 
     def runcode(self, form) -> None:
         # print(json.dumps(form))
-        print(repr(result := bel(expr := vec2list(form))))
+        self.thatexpr = vec2list(form)
+        self.that = bel(self.thatexpr)
+        if self.that is not None:
+            print(prrepr(self.that))
 
 
 @contextlib.contextmanager
