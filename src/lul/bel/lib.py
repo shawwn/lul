@@ -562,6 +562,8 @@ def literal(e):
         return t
     elif number(e):
         return t
+    elif consp(e):
+        return nil
     elif callable(e):
         return t
     elif string_literal_p(e):
