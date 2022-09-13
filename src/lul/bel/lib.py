@@ -4,11 +4,20 @@ import contextlib
 
 from .runtime import *
 import json
+import sys
 
 import __main__ as G
+M = sys.modules[__name__]
+
+
+_R = TypeVar("_R")
+_S = TypeVar("_S")
 
 # def no(x):
 #     return id(x, nil) or falsep(x)
+
+def init(x, y):
+    return y if x is unset else x
 
 def atom(x):
     return no(id(type(x), quote("pair")))
@@ -90,7 +99,7 @@ def list(*args):
 #                           (map f (cdr (car ls))))
 #                     (cons (apply f (map car ls))
 #                           (apply map f (map cdr ls)))))
-def map(f, *ls):
+def map(f, *ls) -> Cons:
     if no(ls):
         return nil
     elif yes(some(no, ls)):
@@ -140,7 +149,7 @@ def uvar(*name):
 #           args))
 @macro_
 def do(*args):
-    return reduce(lambda x, y: list(list(quote("fn"), uvar(), y), x),
+    return reduce(lambda x, y: list(list(quote("fn"), uvar("do"), y), x),
                   args)
 
 def do_f(x, *args):
@@ -263,7 +272,16 @@ def number(x):
 #   (or (no x)
 #       (and (pair x) (proper (cdr x)))))
 def proper(x):
-    return no(x) or (pair(x) and proper(cdr(x)))
+    return or_f(lambda: no(x),
+                lambda: and_f(lambda: pair(x),
+                              lambda: proper(cdr(x))))
+
+def mkproper(x):
+    return if_f(lambda: null(x),
+                lambda: x,
+                lambda: pair(x),
+                lambda: cons(car(x), mkproper(cdr(x))),
+                lambda: list(x))()
 
 # (def string (x)
 #   (and (proper x) (all char x)))
@@ -320,12 +338,15 @@ def case(expr, *args):
                          list(quote("case"), v, *args[2:])))
 
 
-def case_f(expr, *args):
+def case_f(expr, *args) -> Callable[[], Any]:
     if no(cdr(args)):
-        return car(args)()
+        if no(car(args)):
+            return lambda: nil
+        else:
+            return car(args)
     else:
         if equal(expr, car(args)):
-            return cadr(args)()
+            return cadr(args)
         else:
             return apply(case_f, expr, cddr(args))
 
@@ -423,17 +444,19 @@ def get(k, kvs, f=unset):
     if isinstance(kvs, Cons):
         # return find(lambda _: f(car(_), k), kvs)
         for tail in kvs:
-            x = car(tail)
-            if f(car(x), k):
-                return x
+            cell = car(tail)
+            name, value = car(cell), cdr(cell)
+            if value is unset:
+                continue
+            if f(name, k):
+                return cell
         if dictp(it := cdr(kvs[-1])):
             kvs = it
+        elif modulep(it):
+            kvs = it.__dict__
         else:
             return nil
     assert f in [equal, id]
-    # if isinstance(kvs, dict):
-    #     return join(k, kvs[k]) if k in kvs else nil
-    # return join(k, getattr(kvs, k)) if hasattr(kvs, k) else nil
     out = Cell(kvs, k, unset)
     if cdr(out) is unset:
         return nil
@@ -481,8 +504,8 @@ def idfn(x):
 
 # (def is (x)
 #   [= _ x])
-def is_(x):
-    return lambda _: equal(_, x)
+def is_(x: Callable[[], Any]):
+    return lambda _: equal(_, x())
 
 # (mac eif (var (o expr) (o fail) (o ok))
 #   (with (v (uvar)
@@ -556,7 +579,7 @@ def fn(parms, *body):
 def literal(e):
     if in_(e, t, nil, o, apply):
         return t
-    elif in_(type(e), quote("char"), quote("stream")):
+    elif in_(type(e), quote("char"), quote("stream"), quote("table")):
         return t
     elif caris(e, quote("lit")):
         return t
@@ -576,7 +599,13 @@ def string_literal_p(e):
         return False
     if len(e) <= 0:
         return False
-    return e[0].isdigit() or (e.startswith('"') and e.endswith('"'))
+    if e.startswith('"') and e.endswith('"'):
+        return True
+    if e.startswith('-'):
+        e = e[1:]
+    if len(e) <= 0:
+        return False
+    return e[0].isdigit()
 
 def evliteral(e):
     if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
@@ -602,21 +631,60 @@ def isa(name):
 #   (ev (list (list e nil))
 #       nil
 #       (list nil g)))
-def bel(e, g=unset, a=unset):
+def bel(e, g=unset, a=unset, p=unset):
+    # breakpoint()
+    p_g = jump.p_g if (jump := mev_tail.get()) else nil
+    s = jump.s if jump else nil
+    r = jump.r if jump else nil
     if a is unset:
-        # a = nil
-        # a = XCONS(G.__dict__)
-        a = G.__dict__
+        if jump is None:
+            # a = nil
+            # a = XCONS(G.__dict__)
+            # a = G.__dict__
+            a = G
+        else:
+            e_a = car(jump.s)
+            a = cadr(e_a)
+    if p is unset:
+        p = car(p_g)
     if g is unset:
-        # g = globe()
-        # g = nil
-        # g = {**py.__dict__, **globals()}
-        # g = XCONS(globals())
-        # g = append(XCONS(G.__dict__), XCONS(globals()))
-        g = globals()
-    return ev(list(list(e, a)),
-              nil,
-              list(nil, g))
+        if jump is None:
+            # g = globe()
+            # g = nil
+            # g = {**py.__dict__, **globals()}
+            # g = XCONS(globals())
+            # g = append(XCONS(G.__dict__), XCONS(globals()))
+            # g = globals()
+            g = M
+        else:
+            g = cadr(p_g)
+    return tev(cons(list(e, a), s),
+               r,
+               list(p, g))
+
+def bel(e, g=unset, a=unset, p=unset):
+    s = nil
+    r = nil
+    if jump := mev_tail.get():
+        # s = jump.thread.s
+        # r = jump.thread.r
+        p_g = jump.p_g
+        if g is unset:
+            g = cadr(p_g)
+        if a is unset:
+            a = jump.lexenv
+        if p is unset:
+            p = car(p_g)
+    else:
+        if g is unset:
+            g = M
+        if a is unset:
+            a = G
+        if p is unset:
+            p = nil
+    return tev(cons(list(e, a), s),
+               r,
+               list(p, g))
 
 # (def mev (s r (p g))
 #   (if (no s)
@@ -627,48 +695,222 @@ def bel(e, g=unset, a=unset):
 #                  (cons (list s r) p)
 #                  (snoc p (list s r)))
 #              g)))
-def mev_(s, r, pg):
-    p, g = car(pg), cadr(pg)
+def mev_(s, r, p_g):
+    p, g = car(p_g), cadr(p_g)
     if no(s):
-        if yes(p):
-            return sched(p, g)
-        else:
-            return car(r)
+        return if_f(lambda: p,
+                    lambda: ([print("discard", r)] and sched(p, g)),
+                    lambda: ([print("leftover", it) if yes(it := cdr(r)) else nil] and car(r)))()
     else:
-        return sched(cons(list(s, r), p)
-                     if yes(cdr(binding(quote("lock"), s))) else
-                     snoc(p, list(s, r)),
-                     g)
+        return sched(schedule(s, r, p), g)
 
-mev_tail = CV.ContextVar[bool]("mev_tail", default=False)
+def schedule(s, r, p):
+    return if_f(lambda: cdr(binding(quote("lock"), s)),
+                lambda: cons(list(s, r), p),
+                lambda: snoc(p, list(s, r)))()
+
+"""
+Each thread is a list 
+
+(s r)
+
+of two stacks: a stack s of expressions to be evaluated, and a stack 
+r of return values.
+
+Each element of s is in turn a list
+
+(e a)
+
+where e is an expression to be evaluated, and a is a lexical
+environment consisting of a list of (var . val) pairs.
+
+The variable p holds a list of all the threads (usually other than 
+the current one).
+
+The other thing we need to pass around in the interpreter is the
+global bindings, which is another environment represented as a list 
+of (var . val) pairs. I use the variable g for this.
+
+The most common parameter list we'll see is 
+
+(s r m)
+
+where s is the current expression stack, r is the current return 
+value stack, and m is a list (p g) of the other threads and the 
+global bindings.
+"""
+
+class BelThread(Cons):
+    """Each thread is a list
+
+    (s r)
+
+    of two stacks: a stack s of expressions to be evaluated, and a stack
+    r of return values.
+    """
+    @property
+    def s(self) -> List[BelExpression]:
+        return map(BelExpression.new, car(self)).list()
+    @property
+    def r(self) -> Optional[Cons]:
+        return cadr(self)
+    def __repr__(self):
+        # return f"BelThread(s={self.s!r}, r={self.r!r})"
+        return repr_self(self, ("s", None), ("r", None))
+
+class BelExpression(Cons):
+    @property
+    def e(self) -> Optional[Cons]:
+        return car(self)
+    @property
+    def a(self) -> Optional[Cons]:
+        return cadr(self)
+    def __repr__(self):
+        # return f"BelExpression(e={self.e!r})"
+        return repr_self(self, ("e", None), ("a", None))
+
+
+# class BelParameters(Cons):
+#     @property
+#     def e(self):
+#         return car(self)
+#     @property
+#     def a(self):
+#         return cadr(self)
+#     def __repr__(self):
+#         return f"BelExpression(e={self.e!r})"
+
+
 
 class JumpToMev(Exception):
-    def __init__(self, s, r, pg):
+    def __init__(self, s, r, p_g: Cons, prev: Optional[JumpToMev]):
         self.s = s
         self.r = r
-        self.pg = pg
+        self.p_g = p_g
+        self.prev = prev
 
-def mev(s, r, pg):
-    if mev_tail.get():
-        raise JumpToMev(s, r, pg)
+    @property
+    def thread(self):
+        return BelThread(self.s, self.r)
+
+    @property
+    def lexenv(self):
+        for expr in self.thread.s:
+            if yes(expr.a):
+                return expr.a
+        # if self.prev:
+        #     return self.prev.lexenv
+
+    def __repr__(self):
+        # return f"JumpToMev(e={map(car, self.s)!r}, r={self.r!r}, p={map(car, car(self.p_g))!r}, prev={self.prev!r})"
+        return repr_self(self, ("lexenv", None), ("thread", None), ("prev", None))
+
+    def __str__(self):
+        return repr(self)
+
+mev_tail = CV.ContextVar[JumpToMev]("mev_tail", default=None)
+
+# def let_mev(s, r, p_g):
+#     JumpToMev(s, r, p_g)
+#     pass
+
+# def tev(s, r, p_g, prev=unset):
+#     breakpoint()
+#     while True:
+#         if prev is unset:
+#             prev = nil
+#         print("was", mev_tail.get())
+#         reset = mev_tail.set(JumpToMev(s, r, p_g, prev))
+#         # def unwind():
+#         #     nonlocal reset
+#         #     if (it := reset) is not None:
+#         #         reset = None
+#         #         mev_tail.reset(it)
+#         try:
+#             # while True:
+#             #     try:
+#             #         return mev_(s, r, p_g)
+#             #     except JumpToMev as e:
+#             #         mev_tail.set(jump := e)
+#             #         s = jump.s
+#             #         r = jump.r
+#             #         p_g = jump.p_g
+#             return mev_(s, r, p_g)
+#         except JumpToMev as e:
+#             s = e.s
+#             r = e.r
+#             p_g = e.p_g
+#             prev = e.prev
+#         finally:
+#             mev_tail.reset(reset)
+
+def tev(s, r, p_g, prev=unset):
+    if prev is unset:
+        prev = mev_tail.get()
+    reset = mev_tail.set(JumpToMev(s, r, p_g, prev))
+    prev = [prev]
+    try:
+        while True:
+            # print("was", prev)
+            try:
+                return mev_(s, r, p_g)
+            except JumpToMev as e:
+                # mev_tail.reset(reset)
+                mev_tail.set(jump := e)
+                s = jump.s
+                r = jump.r
+                p_g = jump.p_g
+                # prev = jump.prev
+                prev.insert(0, jump.prev)
+                # print("then", map(car, s), r)
+    finally:
+        mev_tail.reset(reset)
+
+def mev(s, r, p_g):
+    if prev := mev_tail.get():
+        raise JumpToMev(s, r, p_g, prev)
+        # return tev(s, r, p_g, prev)
     else:
-        reset = mev_tail.set(True)
-        try:
-            while True:
-                try:
-                    return mev_(s, r, pg)
-                except JumpToMev as e:
-                    s = e.s
-                    r = e.r
-                    pg = e.pg
-        finally:
-            mev_tail.reset(reset)
+        return tev(s, r, p_g, nil)
 
 # (def sched (((s r) . p) g)
 #   (ev s r (list p g)))
 def sched(sr_p, g):
-    s, r, p = car(car(sr_p)), cadr(car(sr_p)), cdr(sr_p)
+    s_r, p = car(sr_p), cdr(sr_p)
+    s, r = car(s_r), cadr(s_r)
     return ev(s, r, list(p, g))
+
+def syntaxp(x):
+    if isinstance(x, str):
+        if not string_literal_p(x):
+            if x.startswith("~") and len(x) > 1:
+                return t
+            if x.startswith("!") and len(x) > 1:
+                return t
+            for c in [":", "|", "!"]:
+                if not (x.endswith(c) or x.startswith(c)):
+                    if c in x:
+                        return t
+    return nil
+
+def evsyntax(x):
+    if not syntaxp(x):
+        return quote(x)
+    x: str
+    if ":" in x and "!" not in x and "|" not in x:
+        lh, _, rh = x.partition(":")
+        return list(quote("compose"), evsyntax(lh), evsyntax(rh))
+    if x.startswith("!") and len(x) > 1:
+        return list(quote("upon"), evsyntax(x[1:]))
+    if "!" in x and "|" not in x:
+        name, _, arg = x.rpartition("!")
+        return list(evsyntax(name), list(quote("quote"), quote(arg)))
+    if "|" in x:
+        name, _, test = x.rpartition("|")
+        return list(quote("t"), quote(name), evsyntax(test))
+    if x.startswith("~") and len(x) > 1:
+        return list(quote("compose"), quote("no"), evsyntax(x[1:]))
+    assert False, "Bad syntax"
 
 # (def ev (((e a) . s) r m)
 #   (aif (literal e)            (mev s (cons e r) m)
@@ -677,7 +919,9 @@ def sched(sr_p, g):
 #        (get (car e) forms id) ((cdr it) (cdr e) a s r m)
 #                               (evcall e a s r m)))
 def ev(ea_s, r, m):
-    e, a, s = car(car(ea_s)), cadr(car(ea_s)), cdr(ea_s)
+    e_a, s = car(ea_s), cdr(ea_s)
+    e, a = car(e_a), cadr(e_a)
+    e = evsyntax(e)
     if yes(literal(e)):
         return mev(s, cons(evliteral(e), r), m)
     elif yes(variable(e)):
@@ -703,32 +947,25 @@ def ev(ea_s, r, m):
 #         (aif (lookup v a s g)
 #              (mev s (cons (cdr it) r) m)
 #              (sigerr (list 'unboundb v) s r m)))))
-def vref(v, a, s, r, m):
-    g = cadr(m)
-    if inwhere(s):
-        if yes(it := or_f(lambda: lookup(v, a, s, g),
+def vref(k, a, s, r, m):
+    p, g = car(m), cadr(m)
+    if yes(inwhere(s)):
+        if yes(it := or_f(lambda: lookup(k, a, s, r, p, g),
                           lambda: and_f(lambda: car(inwhere(s)),
-                                        lambda: gset(v, nil, g)))):
-            # lambda: [cell := cons(v, nil),
-            #          xdr(g, cons(cell, cdr(g))),
-            #          cell][-1]))):
-            #     lambda cell: ([xdr(g, cons(cell, cdr(g)))] and cell))
-            # # (lambda cell: (lambda a, b: b)(xdr(g, cons(cell, cdr(g))), cell))(
-            # #     cons(v, nil))
-            # ))):
+                                        lambda: xset(k, nil, g)))):
             return mev(cdr(s), cons(list(it, quote("d")), r), m)
         else:
-            if yes(it := lookup(v, a, s, g)):
+            if yes(it := lookup(k, a, s, r, p, g)):
                 return mev(s, cons(cdr(it), r), m)
             else:
-                return sigerr(list(quote("unboundb"), v), s, r, m)
+                return sigerr(list(quote("unboundb"), k), s, r, m)
     else:
-        if yes(it := lookup(v, a, s, g)):
+        if yes(it := lookup(k, a, s, r, p, g)):
             return mev(s, cons(cdr(it), r), m)
         else:
-            return sigerr(list(quote("unboundb"), v), s, r, m)
+            return sigerr(list(quote("unboundb"), k), s, r, m)
 
-def gset(k, v, kvs):
+def xset(k, v, kvs):
     assert not null(kvs)
     if consp(kvs):
         cell = cons(k, v)
@@ -736,7 +973,6 @@ def gset(k, v, kvs):
     else:
         cell = Cell(kvs, k, nil)
         xdr(cell, v)
-    #return list(cell, quote("d"))
     return cell
 
 # (set smark (join))
@@ -758,21 +994,24 @@ def inwhere(s):
 #       (case e
 #         scope (cons e a)
 #         globe (cons e g))))
-def lookup(e, a, s, g):
+def lookup(e, a, s, r, p, g):
     return or_f(lambda: binding(e, s),
                 lambda: get(e, a, id),
                 lambda: get(e, g, id),
-                lambda: (cons(e, a) if id(e, quote("scope")) else
-                         cons(e, g) if id(e, quote("globe")) else
-                         nil))
+                lambda: case_f(e,
+                               quote("scope"), lambda: cons(e, a),
+                               quote("stack"), lambda: cons(e, s),
+                               quote("outer"), lambda: cons(e, r),
+                               quote("other"), lambda: cons(e, p),
+                               quote("globe"), lambda: cons(e, g))())
 
 # (def binding (v s)
 #   (get v
 #        (map caddr (keep [begins _ (list smark 'bind) id]
 #                         (map car s)))
 #        id))
-def binding(v, s):
-    return get(v,
+def binding(k, s):
+    return get(k,
                map(caddr, keep(lambda _: begins(_, list(smark, quote("bind")), id),
                                map(car, s))),
                id)
@@ -789,12 +1028,16 @@ def sigerr(msg, s, r, m):
         if isinstance(msg, Exception):
             raise msg
         else:
-            return err(quote("no-err"))
+            return err(quote("no-err"), msg)
 
 # (mac fu args
 #   `(list (list smark 'fut (fn ,@args)) nil))
-def fu(f):
-    return list(list(smark, quote("fut"), f), nil)
+# def fu(f):
+#     return list(list(smark, quote("fut"), f), nil)
+def fu(a):
+    def fut(f):
+        return list(list(smark, quote("fut"), f), a)
+    return fut
 
 # (def evmark (e a s r m)
 #   (case (car e)
@@ -814,11 +1057,11 @@ def evmark(e, a, s, r, m):
         quote("bind"), (lambda: mev(s, r, m)),
         quote("loc"), (lambda: sigerr(quote("unfindable"), s, r, m)),
         quote("prot"), (lambda: mev(cons(list(cadr(e), a),
-                                         fu(lambda s, r, m: mev(s, cdr(r), m)),
+                                         fu(a)(lambda s, r, m: mev(s, cdr(r), m)),
                                          s),
                                     r,
                                     m)),
-        lambda: sigerr(quote("unknown-mark"), s, r, m))
+        lambda: sigerr(quote("unknown-mark"), s, r, m))()
 
 # (set forms (list (cons smark evmark)))
 forms = list(cons(smark, evmark))
@@ -877,8 +1120,11 @@ def if_(es, a, s, r, m):
         return mev(s, cons(nil, r), m)
     else:
         return mev(cons(list(car(es), a),
-                        cons(fu(lambda s, r, m: if2(cdr(es), a, s, r, m)),
-                             s) if yes(cdr(es)) else s),
+                        if_f(lambda: cdr(es),
+                             lambda: cons(fu(a)((lambda s, r, m:
+                                                 if2(cdr(es), a, s, r, m))),
+                                          s),
+                             lambda: s)()),
                    r,
                    m)
 
@@ -891,11 +1137,30 @@ def if_(es, a, s, r, m):
 #        (cdr r)
 #        m))
 def if2(es, a, s, r, m):
-    return mev(cons(list(car(es) if yes(car(r)) else cons(quote("if"), cdr(es)),
+    return mev(cons(list(if_f(lambda: car(r),
+                              lambda: car(es),
+                              lambda: cons(quote("if"), cdr(es)))(),
                          a),
                     s),
                cdr(r),
                m)
+
+def if_f(*clauses: Callable[[], Any]) -> Callable[[], Any]:
+    while len(clauses) >= 2:
+        cond, cons, *clauses = clauses
+        if yes(cond()):
+            return cons
+    if clauses:
+        return clauses[0]
+    return lambda: nil
+
+def aif_f(*clauses: Tuple[Callable[[], _R], Callable[[_R], Any]]):
+    for clause in clauses:
+        cond, cons = clause
+        if yes(it := cond()):
+            return cons(it)
+    return nil
+
 
 # (form where ((e (o new)) a s r m)
 #   (mev (cons (list e a)
@@ -907,7 +1172,8 @@ def if2(es, a, s, r, m):
 def where(es, a, s, r, m):
     e, new = car(es), cadr(es)
     return mev(cons(list(e, a),
-                    list(list(smark, quote("loc"), new), nil),
+                    list(list(smark, quote("loc"), new),
+                         a),
                     s),
                r,
                m)
@@ -925,7 +1191,7 @@ def dyn(es, a, s, r, m):
     v, e1, e2 = car(es), cadr(es), caddr(es)
     if yes(variable(v)):
         return mev(cons(list(e1, a),
-                        fu(lambda s, r, m: dyn2(v, e2, a, s, r, m)),
+                        fu(a)(lambda s, r, m: dyn2(v, e2, a, s, r, m)),
                         s),
                    r,
                    m)
@@ -942,7 +1208,7 @@ def dyn(es, a, s, r, m):
 def dyn2(v, e2, a, s, r, m):
     return mev(cons(list(e2, a),
                     list(list(smark, quote("bind"), cons(v, car(r))),
-                         nil),
+                         a),
                     s),
                cdr(r),
                m)
@@ -985,15 +1251,20 @@ def ccc(es, a, s, r, m):
 #                    p)
 #              g)))
 @form_("thread")
-def thread(es, a, s, r, pg):
-    e = car(es)
-    p, g = car(pg), cadr(pg)
+def thread(es, a, s, r, m):
+    e = cons("do", es) if yes(cdr(es)) else car(es)
+    p, g = car(m), cadr(m)
+    # breakpoint()
     return mev(s,
                cons(nil, r),
                list(cons(list(list(list(e, a)),
                               nil),
                          p),
                     g))
+
+# @form_("assign")
+# def assign(es, a, s, r, m):
+
 
 # (def evcall (e a s r m)
 #   (mev (cons (list (car e) a)
@@ -1004,7 +1275,7 @@ def thread(es, a, s, r, pg):
 #        m))
 def evcall(e, a, s, r, m):
     return mev(cons(list(car(e), a),
-                    fu(lambda s, r, m: evcall2(cdr(e), a, s, r, m)),
+                    fu(a)(lambda s, r, m: evcall2(cdr(e), a, s, r, m)),
                     s),
                r,
                m)
@@ -1024,7 +1295,7 @@ def evcall2(es, a, s, op_r, m):
     if isa(quote("mac"))(op):
         return applym(op, es, a, s, r, m)
     else:
-        @fu
+        @fu(a)
         def f(s, r, m):
             _ = snap(es, r)
             args, r2 = car(_), cadr(_)
@@ -1050,9 +1321,9 @@ def applym(mac, args, a, s, r, m):
     return applyf(caddr(mac),
                   args,
                   a,
-                  cons(fu(lambda s, r, m: mev(cons(list(car(r), a), s),
-                                              cdr(r),
-                                              m)),
+                  cons(fu(a)(lambda s, r, m: mev(cons(list(car(r), a), s),
+                                                 cdr(r),
+                                                 m)),
                        s),
                   r,
                   m)
@@ -1066,18 +1337,57 @@ def applym(mac, args, a, s, r, m):
 def applyf(f, args, a, s, r, m):
     if equal(f, apply):
         return applyf(car(args), reduce(join, cdr(args)), a, s, r, m)
-    elif caris(f, quote("lit")):
-        if proper(f):
-            return applylit(f, args, a, s, r, m)
-        else:
-            return sigerr(quote("bad-lit"), s, r, m)
-    elif callable(f):
-        try:
-            return mev(s, cons(apply(f, args), r), m)
-        except Exception as v:
-            return sigerr(v, s, r, m)
     else:
-        return sigerr(quote("cannot-apply"), s, r, m)
+        return applylit(f, args, a, s, r, m)
+    # elif caris(f, quote("lit")):
+    #     if proper(f):
+    #         return applylit(f, args, a, s, r, m)
+    #     else:
+    #         return sigerr(list(quote("bad-lit"), f, args), s, r, m)
+    # elif callable(f):
+    #     return applylit(f, args, a, s, r, m)
+    #     # return applyfunc(f, args, a, s, r, m)
+    # else:
+    #     return sigerr(list(quote("cannot-apply"), f, args), s, r, m)
+
+def applyfunc(f, args, a, s, r, m):
+    try:
+        v = apply(f, args)
+    except Exception as v:
+        return sigerr(v, s, r, m)
+    return mev(s, cons(v, r), m)
+
+# def applyfunc(f, args, a, s, r, m):
+#     print("applythen", a, f, args)
+#     @fu(a)
+#     def f(s, r, m):
+#         try:
+#             v = apply(f, args)
+#         except Exception as v:
+#             return sigerr(v, s, r, m)
+#         return mev(s, cons(v, r), m)
+#         # return mev(cons(list(list(quote("quote"), v), a),
+#         #                 s),
+#         #            r,
+#         #            m)
+#     return mev(cons(f, s
+
+# def applyfunc(f, args, a, s, r, m):
+#     @fu(a)
+#     def then(s, r, m):
+#         try:
+#             v = apply(f, args)
+#         except Exception as v:
+#             return sigerr(v, s, r, m)
+#         return mev(s, cons(v, r), m)
+#     # print("applyfunc", f, args, a)
+#     return mev(cons(list(nil, a), then, s), r, m)
+#     # map(lambda e_a: list(car(e_a), cons(a, cdr(e_a))), s)
+#     # return mev(cons(fu((lambda s, r, m:
+#     #                     evcall2(args, a, s, r, m))),
+#     #                 s),
+#     #            cons(v, r),
+#     #            m)
 
 # (def applylit (f args a s r m)
 #   (aif (and (inwhere s) (find [(car _) f] locfns))
@@ -1099,17 +1409,27 @@ def applyf(f, args, a, s, r, m):
 #                        (mev (cons (list e a) s) r m))
 #                      (sigerr 'unapplyable s r m))))))
 def applylit(f, args, a, s, r, m):
-    if yes(inwhere(s)) and yes(it := find(lambda _: car(_)(f), locfns)):
+    # if yes(inwhere(s)) and yes(it := find(lambda _: car(_)(f), locfns)):
+    if yes(it := and_f(lambda: [print("inwhere", that) if yes(that := inwhere(s)) else nil] and that,
+                       lambda: find(lambda _: print("locfn", car(_), f) or car(_)(f), locfns))):
         return cadr(it)(f, args, a, s, r, m)
+    elif callable(f):
+        return applyfunc(f, args, a, s, r, m)
     else:
-        _ = cdr(f)
-        tag, rest = car(_), cdr(_)
+        if caris(f, quote("lit")):
+            tag, rest = cadr(f), cddr(f)
+        else:
+            tag, rest = type(f), f
+        def do_prim():
+            return applyprim(car(rest), args, s, r, m)
         def do_clo():
             env, parms, body, extra = car(rest), cadr(rest), caddr(rest), cdr(cddr(rest))
             if yes(okenv(env)) and yes(okparms(parms)):
                 return applyclo(parms, args, env, body, s, r, m)
             else:
                 return sigerr(quote("bad-clo"), s, r, m)
+        def do_mac():
+            return applym(f, map(lambda _: list(quote("quote"), _), args), a, s, r, m)
         def do_cont():
             s2, r2, extra = car(rest), cadr(rest), cddr(rest)
             if yes(okstack(s2)) and yes(proper(r2)):
@@ -1124,17 +1444,25 @@ def applylit(f, args, a, s, r, m):
                 return sigerr(quote("unapplyable"), s, r, m)
         return case_f(
             tag,
-            quote("prim"), (lambda: applyprim(car(rest), args, s, r, m)),
+            quote("prim"), do_prim,
             quote("clo"), do_clo,
-            quote("mac"), (lambda: applym(f, map(lambda _: list(quote("quote"), _), args), a, s, r, m)),
+            quote("mac"), do_mac,
             quote("cont"), do_cont,
-            do_virfns)
+            do_virfns)()
 
 # (set virfns nil)
 virfns = nil
 
 # (mac vir (tag . rest)
 #   `(set virfns (put ',tag (fn ,@rest) virfns)))
+
+def vir_(tag):
+    def vir_setter(f):
+        global virfns
+        virfns = put(tag, f, virfns)
+        return f
+    return vir_setter
+
 
 # (set locfns nil)
 locfns = nil
@@ -1151,15 +1479,34 @@ def loc_(test):
 
 # (loc (is car) (f args a s r m)
 #   (mev (cdr s) (cons (list (car args) 'a) r) m))
-@loc_(is_(car))
+@loc_(is_(lambda: car))
 def loc_is_car(_f, args, _a, s, r, m):
     return mev(cdr(s), cons(list(car(args), quote("a")), r), m)
 
 # (loc (is cdr) (f args a s r m)
 #   (mev (cdr s) (cons (list (car args) 'd) r) m))
-@loc_(is_(cdr))
+@loc_(is_(lambda: cdr))
 def loc_is_cdr(_f, args, _a, s, r, m):
     return mev(cdr(s), cons(list(car(args), quote("d")), r), m)
+
+@loc_(print)
+def loc_print(_f, args, _a, s, r, m):
+    assert False
+    # return mev(cdr(s), cons(list(car(args), quote("d")), r), m)
+
+@loc_(is_(lambda: get))
+def loc_is_get(_f, args, _a, s, r, m):
+    # print("loc_is_get", _f, args, car(s), car(r))
+    k, kvs = car(args), cadr(args)
+    cell = get(k, kvs)
+    if null(cell):
+        if yes(car(inwhere(s))):
+            cell = xset(k, nil, kvs)
+    if yes(cell):
+        return mev(cdr(s), cons(list(cell, quote("d")), r), m)
+    else:
+        return sigerr(list(quote("cannot-get"), k, kvs), s, r, m)
+
 
 # (def okenv (a)
 #   (and (proper a) (all pair a)))
@@ -1197,8 +1544,10 @@ def okparms(p):
     elif yes(caris(p, t)):
         return oktoparm(p)
     else:
-        return and_f((lambda: oktoparm(car(p)) if yes(caris(car(p), o)) else okparms(car(p))),
-                     (lambda: okparms(cdr(p))))
+        return and_f(lambda: if_f(lambda: caris(car(p), o),
+                                  lambda: oktoparm(car(p)),
+                                  lambda: okparms(car(p)))(),
+                     lambda: okparms(cdr(p)))
 
 # (def oktoparm ((tag (o var) (o e) . extra))
 #   (and (okparms var) (or (= tag o) e) (no extra)))
@@ -1268,7 +1617,7 @@ def applyprim(f, args, s, r, m):
                            # quote("coin"), lambda: coin(),
                            # quote("sys"), lambda: sys(a),
                            quote("print"), lambda: print(a),
-                           lambda: sigerr(quote("bad-prim"), s, r, m))
+                           lambda: sigerr(quote("bad-prim"), s, r, m))()
             except Exception as v:
                 return sigerr(v, s, r, m)
             return mev(s, cons(v, r), m)
@@ -1286,10 +1635,10 @@ def applyprim(f, args, s, r, m):
 #        r
 #        m))
 def applyclo(parms, args, env, body, s, r, m):
-    return mev(cons(fu(lambda s, r, m: pass_(parms, args, env, s, r, m)),
-                    fu(lambda s, r, m: mev(cons(list(body, car(r)), s),
-                                           cdr(r),
-                                           m)),
+    return mev(cons(fu(env)(lambda s, r, m: pass_(parms, args, env, s, r, m)),
+                    fu(env)(lambda s, r, m: mev(cons(list(body, car(r)), s),
+                                                cdr(r),
+                                                m)),
                     s),
                r,
                m)
@@ -1305,6 +1654,7 @@ def applyclo(parms, args, env, body, s, r, m):
 #         (caris pat o)  (pass (cadr pat) arg env s r m)
 #                        (destructure pat arg env s r m))))
 def pass_(pat, arg, env, s, r, m):
+    pat = evsyntax(pat)
     def ret(_):
         return mev(s, cons(_, r), m)
     if no(pat):
@@ -1335,10 +1685,10 @@ def pass_(pat, arg, env, s, r, m):
 def typecheck(var_f, arg, env, s, r, m):
     var, f = car(var_f), cadr(var_f)
     return mev(cons(list(list(f, list(quote("quote"), arg)), env),
-                    fu((lambda s, r, m:
-                        pass_(var, arg, env, s, cdr(r), m)
-                        if yes(car(r)) else
-                        sigerr(quote("mistype"), s, r, m))),
+                    fu(env)((lambda s, r, m:
+                             if_f(lambda: car(r),
+                                  lambda: pass_(var, arg, env, s, cdr(r), m),
+                                  lambda: sigerr(quote("mistype"), s, r, m))())),
                     s),
                r,
                m)
@@ -1367,8 +1717,8 @@ def destructure(p_ps, arg, env, s, r, m):
     if no(arg):
         if yes(caris(p, o)):
             return mev(cons(list(caddr(p), env),
-                            fu(lambda s, r, m: pass_(cadr(p), car(r), env, s, cdr(r), m)),
-                            fu(lambda s, r, m: pass_(ps, nil, car(r), s, cdr(r), m)),
+                            fu(env)(lambda s, r, m: pass_(cadr(p), car(r), env, s, cdr(r), m)),
+                            fu(env)(lambda s, r, m: pass_(ps, nil, car(r), s, cdr(r), m)),
                             s),
                        r,
                        m)
@@ -1377,8 +1727,8 @@ def destructure(p_ps, arg, env, s, r, m):
     elif yes(atom(arg)):
         return sigerr(quote("atom-arg"), s, r, m)
     else:
-        return mev(cons(fu(lambda s, r, m: pass_(p, car(arg), env, s, r, m)),
-                        fu(lambda s, r, m: pass_(ps, cdr(arg), car(r), s, cdr(r), m)),
+        return mev(cons(fu(env)(lambda s, r, m: pass_(p, car(arg), env, s, r, m)),
+                        fu(env)(lambda s, r, m: pass_(ps, cdr(arg), car(r), s, cdr(r), m)),
                         s),
                    r,
                    m)
@@ -1419,6 +1769,18 @@ def protected(x):
 #   (reduce (fn (f g)
 #             (fn args (f (apply g args))))
 #           (or fs (list idfn))))
+def compose(*fs):
+    return reduce(compose2, fs or (idfn,))
+
+def compose2(f, g):
+    @functools.wraps(g)
+    def f_then_g(*args, **kws):
+        return f(apply(g, args, **kws))
+    f_name = getattr(f, "__qualname__", getattr(f, "__name__"))
+    g_name = getattr(g, "__qualname__", getattr(g, "__name__"))
+    f_then_g.__qualname__ = f_then_g.__name__ = f"{f_name}:{g_name}"
+    return f_then_g
+
 #
 # (def combine (op)
 #   (fn fs
@@ -1519,28 +1881,35 @@ def atomic(*body):
 @macro_
 def set(*args):
     def f(x):
-        if len(x) <= 1:
-            p, e = car(x), t
-        else:
-            p, e = car(x), cadr(x)
-        v = uvar()
+        p, e = car(x), (cadr(x) if cdr(x) else t)
+        v = uvar("set_v")
         return list(quote("atomic"), list(quote("let"), v, e,
                                           list(quote("let"), list(quote("cell"), quote("loc")), list(quote("where"), p, quote("t")),
                                                list(list(quote("case"), quote("loc"), quote("a"), quote("xar"), quote("d"), quote("xdr")), quote("cell"), v))))
     return cons(quote("do"), map(f, hug(args)))
 
 
+def subtract(x, y=unset):
+    if y is unset:
+        return -x
+    return x - y
+
+from math import floor
 
 globals()["print"] = print
 globals()["."] = lambda *args: cdr(get(*args))
 globals()["+"] = operator.add
-globals()["-"] = operator.sub
+globals()["-"] = subtract
 globals()["*"] = operator.mul
 globals()["/"] = operator.truediv
 globals()["//"] = operator.floordiv
+globals()["="] = equal
 eval = eval
 exec = exec
 compile = compile
+
+def unbound():
+    return unset
 
 # import sys
 # sys.setrecursionlimit(10_000)
@@ -1555,7 +1924,7 @@ def vec2list(v):
     if py.isinstance(v, py.list):
         if len(v) >= 3 and v[-2] == ".":
             l = vec2list(v[0:-2])
-            xdr(l, vec2list(v[-1]))
+            xdr(l[-1], vec2list(v[-1]))
             return l
         return list(*[vec2list(x) for x in v])
     return quote(v)
@@ -1564,8 +1933,257 @@ def vec2list(v):
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
 # [print(repr(x.car)) for x in vec2list(belforms)]
 
+def readallbel(string):
+    return vec2list(reader.read_all(reader.stream(string, mode="bel")))
+
 def readbel(string):
-    return vec2list(reader.read_from_string(string)[0])
+    return vec2list(reader.read_from_string(string, mode="bel")[0])
+
+def compilebel(source):
+    form = readallbel(source)
+    if yes(cdr(form)):
+        return cons(quote("do"), form)
+    else:
+        return car(form)
+
+def evalbel(form, globals=unset, locals=unset):
+    return bel(form, globals, locals)
+
+def bell(source, globals=unset, locals=unset):
+    return evalbel(compilebel(source), globals=globals, locals=locals)
+
+def escape(x):
+    return json.dumps(x)
+
+def quoted(x):
+    if stringp(x):
+        return escape(x)
+    elif atom(x):
+        return x
+    elif not proper(x):
+        return cons(quote("cons"), map(quoted, mkproper(x)))
+    else:
+        return cons(quote("list"), map(quoted, x))
+
+def callbel(f, *args):
+    return bel(cons(f, quoted(args)))
+
+# bell(source="""
+# (def foo (x) (+ x 1))
+#
+# (def quotingp (depth)
+#   (numberp depth))
+#
+# (def quasiquotingp (depth)
+#   (and (quotingp depth) (> depth 0)))
+#
+# (def can_unquote_p (depth)
+#   (and (quoting? depth) (= depth 1)))
+#
+# (def quasisplicep (x depth)
+#   (and (can_unquote_p depth)
+#        (not (atom x))
+#        (= (car x) 'unquote-splicing)))
+#
+# """)
+
+def quotingp (depth):
+    return numberp(depth)
+
+def quasiquotingp(depth):
+    return and_f(lambda: quotingp(depth),
+                 lambda: depth > 0)
+
+def can_unquote_p(depth):
+    return and_f(lambda: quotingp(depth),
+                 lambda: depth == 1)
+
+def quasisplicep(x, depth):
+    return and_f(lambda: can_unquote_p(depth),
+                 lambda: no(atom(x)),
+                 lambda: equal(car(x), quote("unquote-splicing")))
+
+def lastcdr(l):
+    assert consp(l)
+    return l[-1]
+
+def add(l, x):
+    cell = lastcdr(l)
+    assert null(cdr(cell))
+    return xdr(cell, list(x))
+
+def last(l):
+    assert consp(l)
+    return car(l[-1])
+
+def step(form):
+    if not null(form):
+        tail = nil
+        for tail in XCONS(form):
+            yield car(tail)
+        # if not null(it := cdr(tail)) and atom(it):
+        #     yield
+
+
+# (define quasiquote-list (form depth)
+#   (let xs (list '(list))
+#     (each (k v) form
+#       (unless (number? k)
+#         (let v (if (quasisplice? v depth)
+#                    ;; don't splice, just expand
+#                    (quasiexpand (at v 1))
+#                  (quasiexpand v depth))
+#           (set (get (last xs) k) v))))
+#     ;; collect sibling lists
+#     (step x form
+#       (if (quasisplice? x depth)
+#           (let x (quasiexpand (at x 1))
+#             (add xs x)
+#             (add xs '(list)))
+#         (add (last xs) (quasiexpand x depth))))
+#     (let pruned
+#         (keep (fn (x)
+#                 (or (> (# x) 1)
+#                     (not (= (hd x) 'list))
+#                     (keys? x)))
+#               xs)
+#       (if (one? pruned)
+#           (hd pruned)
+#         `(join ,@pruned)))))
+def quasiquote_list(form, depth):
+    xs = list(list("cons"))
+    # collect sibling lists
+    for x in step(mkproper(form)):
+        if quasisplicep(x, depth):
+            add(last(xs), quote("nil"))
+            # add(xs, list(quote("mkproper"), quasiexpand(cadr(x), nil)))
+            add(xs, quasiexpand(cadr(x), nil))
+            add(xs, list(quote("cons")))
+        else:
+            add(last(xs), quasiexpand(x, depth))
+    if proper(form):
+        add(last(xs), quote("nil"))
+    xs = rem(list(quote("cons"), quote("nil")), xs)
+    return cons(quote("append"), xs) if len(xs) > 1 else car(xs)
+
+# (define-global quasiexpand (form depth)
+#   (if (quasiquoting? depth)
+#       (if (atom? form) (list 'quote form)
+#           ;; unquote
+#           (and (can-unquote? depth)
+#                (= (hd form) 'unquote))
+#           (quasiexpand (at form 1))
+#           ;; decrease quasiquoting depth
+#           (or (= (hd form) 'unquote)
+#               (= (hd form) 'unquote-splicing))
+#           (quasiquote-list form (- depth 1))
+#           ;; increase quasiquoting depth
+#           (= (hd form) 'quasiquote)
+#           (quasiquote-list form (+ depth 1))
+#         (quasiquote-list form depth))
+#       (atom? form) form
+#       (= (hd form) 'quote) form
+#       (= (hd form) 'quasiquote)
+#       ;; start quasiquoting
+#       (quasiexpand (at form 1) 1)
+#     (map (fn (x) (quasiexpand x depth)) form)))
+
+def quasiexpand(form, depth):
+    if yes(quasiquotingp(depth)):
+        if yes(atom(form)):
+            return list(quote("quote"), form)
+        # unquote
+        if yes(and_f(lambda: can_unquote_p(depth),
+                       lambda: equal(car(form), quote("unquote")))):
+            return quasiexpand(cadr(form), nil)
+        # decrease quasiquoting depth
+        if yes(or_f(lambda: equal(car(form), quote("unquote")),
+                    lambda: equal(car(form), quote("unquote-splicing")))):
+            return quasiquote_list(form, depth - 1)
+        # increase quasiquoting depth
+        if yes(equal(car(form), quote("quasiquote"))):
+            return quasiquote_list(form, depth + 1)
+        return quasiquote_list(form, depth)
+    if yes(atom(form)):
+        return form
+    if yes(equal(car(form), quote("quote"))):
+        return form
+    if yes(equal(car(form), quote("quasiquote"))):
+        # start quasiquoting
+        return quasiexpand(cadr(form), 1)
+    return imap(lambda x: quasiexpand(x, depth), form)
+
+def imap(f, l):
+    if proper(l):
+        return map(f, l)
+    else:
+        return apply(cons, map(f, mkproper(l)))
+
+def quasi(form):
+    return quasiexpand(form, 1)
+
+@macro_
+def quasiquote(form):
+    return quasi(form)
+
+#
+# (def nth (n|pint xs|pair)
+#   (if (= n 1)
+#       (car xs)
+#       (nth (- n 1) (cdr xs))))
+def nth(n, xs):
+    if consp(xs):
+        xs: Cons
+        return car(xs[n-1])
+    return xs[n-1]
+
+# (vir num (f args)
+# `(nth ,f ,@args))
+@vir_(quote("number"))
+def vir_number(f, args):
+    return cons(quote("nth"), f, args)
+
+# (def table ((o kvs))
+#   `(lit tab ,@kvs))
+def table(kvs=unset) -> py.dict:
+    if kvs is unset:
+        kvs = nil
+    xs: Cons = vec2list(kvs)
+    return py.dict([(car(x), cdr(x)) for x in xs.list()])
+
+#
+# (vir tab (f args)
+#   `(tabref ,f ,@args))
+@vir_(quote("table"))
+def vir_table(f, args):
+    return cons(quote("tabref"), f, args)
+
+# (def tabref (tab key (o default))
+#   (aif (get key (cddr tab))
+#        (cdr it)
+#        default))
+def tabref(tab, key, default=unset):
+    if default is unset:
+        default = nil
+    if yes(it := get(key, tab)):
+        return cdr(it)
+    else:
+        return default
+
+# (loc isa!tab (f args a s r m)
+#   (let e `(list (tabloc ,f ,@(map [list 'quote _] args)) 'd)
+#     (mev (cons (list e a) (cdr s)) r m)))
+#
+# (def tabloc (tab key)
+#   (or (get key (cddr tab))
+#       (let kv (cons key nil)
+#         (push kv (cddr tab))
+#         kv)))
+#
+# (def tabrem (tab key (o f =))
+#   (clean [caris _ key f] (cddr tab)))
+
+
 
 # >>> bel( readbel("(join join join)"))
 # (<function join at 0x105a02a60> . <function join at 0x105a02a60>)
@@ -1609,16 +2227,39 @@ class BelCommandCompiler(codeop.CommandCompiler):
 class BelConsole(code.InteractiveConsole):
     def __init__(self, locals=None, filename="<console>"):
         super().__init__(locals=locals, filename=filename)
+        self.locals = locals
         self.compile = BelCommandCompiler()
         self.that = nil
         self.thatexpr = nil
 
-    def runcode(self, form) -> None:
+    def exec(self, form, locals=None):
+        if locals is None:
+            locals = self.locals
         # print(json.dumps(form))
         self.thatexpr = vec2list(form)
         self.that = bel(self.thatexpr)
         if self.that is not None:
             print(prrepr(self.that))
+
+    def runcode(self, code):
+        """Execute a code object.
+
+        When an exception occurs, self.showtraceback() is called to
+        display a traceback.  All exceptions are caught except
+        SystemExit, which is reraised.
+
+        A note about KeyboardInterrupt: this exception may occur
+        elsewhere in this code, and may not always be caught.  The
+        caller should be prepared to deal with it.
+
+        """
+        try:
+            self.exec(code, self.locals)
+        except SystemExit:
+            raise
+        except:
+            self.showtraceback()
+
 
 
 @contextlib.contextmanager
@@ -1653,6 +2294,7 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
             import readline
         except ImportError:
             pass
-    with letattr(sys, 'ps1', '> ', '>>> '):
+    iterm2_prompt_mark = "\u001b]133;A\u0007\n"
+    with letattr(sys, 'ps1', iterm2_prompt_mark + '> ', '>>> '):
         with letattr(sys, 'ps2', '  ', '... '):
             console.interact(banner, exitmsg)

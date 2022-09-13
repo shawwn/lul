@@ -23,6 +23,11 @@ class NSMeta(type):
             setattr(self, id, value)
             return value
 
+def table(*args):
+    return dict(zip(args[::2], args[1::2]))
+
+def delay(x):
+    return lambda: x
 
 def id(x=nil, y=nil):
     if eq(x, y):
@@ -80,19 +85,22 @@ def nom(x):
 def quote(x):
     return sym(x)
 
-def apply(f, *args):
+def apply(f, *args, **kws):
     xs = args[-1]
     if isinstance(xs, Cons):
         xs = xs.list()
     elif xs is nil:
         xs  = ()
     args = tuple(args[0:-1]) + tuple(xs)
-    return f(*args)
+    return call(f, *args, **kws)
+
+def call(f, *args, **kws):
+    return f(*args, **kws)
 
 # globe = globals
 
 unset = join("unset")
 o = "o"
 
-def err(x):
-    raise Error(x)
+def err(x, *args):
+    raise Error(x, *args)

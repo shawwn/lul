@@ -10,6 +10,7 @@ from typing_extensions import * # type: ignore
 # if not TYPE_CHECKING:
 #     from typing_extensions import ParamSpec, ParamSpecArgs, ParamSpecKwargs
 from typing import *
+import types
 
 # if not TYPE_CHECKING:
 #     List = List
@@ -27,6 +28,39 @@ import collections.abc as std
 import abc # type: ignore
 import collections # type: ignore
 import contextvars as CV
+import contextlib
+
+@contextlib.contextmanager
+def CV_let(var: CV.ContextVar[T], val: T):
+    token = var.set(val)
+    try:
+        yield var
+    finally:
+        var.reset(token)
+
+indent_level = CV.ContextVar[int]("indent_level", default=0)
+
+def indentation() -> str:
+    return " " * indent_level.get()
+
+def with_indent(n=2):
+    return CV_let(indent_level, indent_level.get() + n)
+
+def repr_fields(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]]):
+    xs = []
+    with with_indent():
+        ind = indentation()
+        for kv in kvs:
+            k, v = kv
+            if v is None:
+                v = lambda k, self: (repr(it) if (it := getattr(self, k, None)) is not None else None)
+            x = v(k, self)
+            if x is not None:
+                xs.append(f"\n{ind}{k}={x}")
+    return ",".join(xs)
+
+def repr_self(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]]):
+    return py.type(self).__name__ + "(" + repr_fields(self, *kvs) + ")"
 
 def stringp(x):
     return isinstance(x, str)
@@ -698,6 +732,10 @@ class Cons:
         self.get_car = get_car
         self.get_cdr = get_cdr
 
+    @classmethod
+    def new(cls, src: Cons):
+        return cls(src.car_, src.cdr_, src.set_car, src.set_cdr, src.get_car, src.get_cdr)
+
     @property
     def car(self):
         return self.get_car() if self.get_car else self.car_
@@ -763,6 +801,8 @@ class Cons:
 
 class Cell(Cons):
     def __init__(self, kvs, k, *default, get_car=None, set_car=None, get_cdr=None, set_cdr=None):
+        if modulep(kvs):
+            kvs = kvs.__dict__
         if get_cdr is None:
             def get_cdr():
                 if isinstance(kvs, std.Mapping):
@@ -842,6 +882,10 @@ def numberp(x):
 @dispatch()
 def dictp(x):
     return isinstance(x, std.Mapping)
+
+@dispatch()
+def modulep(x):
+    return isinstance(x, types.ModuleType)
 
 @dispatch()
 def car(x):
