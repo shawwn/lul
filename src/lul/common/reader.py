@@ -51,9 +51,9 @@ def looking_at(s, predicate):
     c = peek_char(s)
     return predicate(c) if callable(predicate) else c == predicate
 
-def stream(string: str, start=0, end=None, more=None, mode=None):
+def stream(string: str, start=0, end=None, more=None, mode: Optional[str] = None):
     end = len(string) if end is None else end
-    return [string, start, end, more, mode or "lisp"]
+    return ["lit", "stream", string, start, end, more, mode or "lisp"]
 
 def stream_item(s, idx, *val):
     if val:
@@ -61,19 +61,19 @@ def stream_item(s, idx, *val):
     return s[idx]
 
 def stream_string(s, *val) -> str:
-    return stream_item(s, 0, *val)
+    return stream_item(s, 2+0, *val)
 
 def stream_pos(s, *val) -> int:
-    return stream_item(s, 1, *val)
+    return stream_item(s, 2+1, *val)
 
 def stream_end(s, *val) -> int:
-    return stream_item(s, 2, *val)
+    return stream_item(s, 2+2, *val)
 
 def stream_more(s, *val) -> Any:
-    return stream_item(s, 3, *val)
+    return stream_item(s, 2+3, *val)
 
-def stream_mode(s, *val) -> Any:
-    return stream_item(s, 4, *val)
+def stream_mode(s, *val) -> str:
+    return stream_item(s, 2+4, *val)
 
 def forward_char(s, count=1):
     stream_pos(s, stream_pos(s) + count)
@@ -86,8 +86,6 @@ def read_char(s):
     if (c := peek_char(s)) is not None:
         stream_pos(s, stream_pos(s) + 1)
         return c
-    else:
-        raise EndOfFile()
 
 def read_line(s):
     r = []
@@ -186,7 +184,8 @@ def expected(s, c: str, start: int):
     raise EndOfFile(f"Expected {c!r} at {format_line_info(s, stream_pos(s))} from {format_line_info(s, start)}")
 
 def read_list(s, open: str, close: str, start=None):
-    start = stream_pos(s)
+    if start is None:
+        start = stream_pos(s)
     assert read_char(s) == open
     out = []
     skip_non_code(s)
@@ -223,6 +222,7 @@ def read_string(s, open: str, close: str, backquote: Optional[bool] = None):
     while (c := peek_char(s)) and c != close:
         if backquote is not None and c == "\\":
             if backquote:
+                # out.append(c)
                 out.append(read_char(s))
             else:
                 read_char(s)

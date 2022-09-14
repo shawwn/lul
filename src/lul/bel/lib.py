@@ -12,6 +12,46 @@ M = sys.modules[__name__]
 
 _R = TypeVar("_R")
 _S = TypeVar("_S")
+TCons = TypeVar("TCons", bound=Cons, covariant=True)
+
+if TYPE_CHECKING:
+    TExpr: TypeAlias = "T"
+    TE: TypeAlias = "TExpr"
+    # TG = Dict[str, T]
+    # TEnvr = Union[Cons[str, T], TG]
+    # TS = ConsList[Cons[TExpr,Cons[TEnvr, None]]]
+    # TR = ConsList[TExpr]
+    # TThread = Cons[TS, Cons[TR, None]]
+    # TM = Cons[ConsList[TThread], TG]
+    # class ConsList2(Cons[T0, Cons[T1, None]]): ...
+    # List1 = Cons[T0, None]
+    # List2 = Cons[T0, Cons[T1, None]]
+    # List3 = Cons[T0, Cons[T1, Cons[T2, None]]]
+    # List4 = Cons[T0, Cons[T1, Cons[T2, Cons[T3, None]]]]
+    List1: TypeAlias = "Cons[T0, None]"
+    List2: TypeAlias = "Cons[T0, Cons[T1, None]]"
+    Rest2: TypeAlias = "Cons[T0, Cons[T1, T2]]"
+    List3: TypeAlias = "Cons[T0, Cons[T1, Cons[T2, None]]]"
+    List4: TypeAlias = "Cons[T0, Cons[T1, Cons[T2, Cons[T3, None]]]]"
+
+    # class TG(Dict[str, T]): ...
+    # class TEnvr(Tuple[Cons[str, T], ...], TG): ...
+    # class TS(Tuple[List2[TExpr, TEnvr], ...]): ...
+    # class TR(Tuple[TExpr, ...]): ...
+    # class TP(List2[TS, TR]): ...
+    # TP = List2[TS, TR]
+    A = TypeVar("A")
+    E = TypeVar("E")
+    TCell: TypeAlias = "Union[Cell[str, T], Cons[str, T]]"
+    TA: TypeAlias = "Tuple[TCell[T], ...]"
+    TE_A: TypeAlias = "List2[E, TA[T]]"
+    TS: TypeAlias = "Tuple[TE_A[E, T], ...]"
+    TR: TypeAlias = "Tuple[T, ...]"
+    TS_R: TypeAlias = "List2[TS[E, T], TR[T]]"
+    TP: TypeAlias = "Tuple[TS_R[E, T], ...]"
+    TG: TypeAlias = "Dict[str, T]"
+    TM: TypeAlias = "List2[TP[E, T], TG[T]]"
+
 
 # def no(x):
 #     return id(x, nil) or falsep(x)
@@ -62,6 +102,13 @@ def reduce(f, xs):
     else:
         return f(car(xs), reduce(f, cdr(xs)))
 
+@overload
+def cons(a: A, b: D) -> Cons[A, D]: ...
+@overload
+def cons(a: T0, b: T1, c: T2) -> Cons[T0, Cons[T1, T2]]: ...
+@overload
+def cons(a: T0, b: T1, c: T2, d: T3) -> Cons[T0, Cons[T1, Cons[T2, T3]]]: ...
+
 def cons(*args):
     return reduce(join, args)
 
@@ -87,6 +134,25 @@ def append(*args):
 def snoc(*args):
     return append(car(args), cdr(args))
 
+@overload
+def list() -> None: ...
+@overload
+def list(a: T0) -> Cons[T0, None]: ...
+@overload
+def list(a: T0, b: T1) -> Cons[T0, Cons[T1, None]]: ...
+@overload
+def list(a: T0, b: T1, c: T2) -> Cons[T0, Cons[T1, Cons[T2, None]]]: ...
+@overload
+def list(a: T0, b: T1, c: T2, d: T3) -> Cons[T0, Cons[T1, Cons[T2, Cons[T3, None]]]]: ...
+@overload
+def list(a: T0, b: T1, c: T2, d: T3, e: T4) -> Cons[T0, Cons[T1, Cons[T2, Cons[T3, Cons[T4, None]]]]]: ...
+@overload
+def list(a: T0, b: T1, c: T2, d: T3, e: T4, f: T5) -> Cons[T0, Cons[T1, Cons[T2, Cons[T3, Cons[T4, Cons[T5, None]]]]]]: ...
+@overload
+def list(a: T0, b: T1, c: T2, d: T3, e: T4, f: T5, g: T6) -> Cons[T0, Cons[T1, Cons[T2, Cons[T3, Cons[T4, Cons[T5, Cons[T6, None]]]]]]]: ...
+# @overload
+# def list(*args: T) -> ConsList[T]: ...
+
 # (def list args
 #   (append args nil))
 def list(*args):
@@ -99,7 +165,9 @@ def list(*args):
 #                           (map f (cdr (car ls))))
 #                     (cons (apply f (map car ls))
 #                           (apply map f (map cdr ls)))))
-def map(f, *ls) -> Cons:
+def map(f: Callable[[T], R], l: ConsList[T], *ls: ConsList[T]) -> Cons[R]:
+    ls = (l, *ls)
+    ls: Tuple[Cons[T], ...]
     if no(ls):
         return nil
     elif yes(some(no, ls)):
@@ -108,6 +176,7 @@ def map(f, *ls) -> Cons:
         return cons(f(car(car(ls))),
                     map(f, cdr(car(ls))))
     else:
+        ls: Cons[T]
         return cons(apply(f, map(car, ls)),
                     apply(map, f, map(cdr, ls)))
 
@@ -276,7 +345,7 @@ def proper(x):
                 lambda: and_f(lambda: pair(x),
                               lambda: proper(cdr(x))))
 
-def mkproper(x):
+def mkproper(x) -> Cons:
     return if_f(lambda: null(x),
                 lambda: x,
                 lambda: pair(x),
@@ -304,16 +373,26 @@ def mem(x, ys, f=unset):
 def in_(x, *ys):
     return mem(x, ys)
 
+@overload
+def cadr(x: Tuple[T, ...]) -> T: ...
+@overload
+def cadr(x: List2[T0, T1]) -> T1: ...
 # (def cadr  (x) (car (cdr x)))
+# def cadr(x: TCons[T0, TCons[T1, None]]) -> T1:
 def cadr(x):
     return car(cdr(x))
+
+@overload
+def cddr(x: Tuple[T, ...]) -> T: ...
+@overload
+def cddr(x: Rest2[T0, T1, T2]) -> T2: ...
 
 # (def cddr  (x) (cdr (cdr x)))
 def cddr(x):
     return cdr(cdr(x))
 
 # (def caddr (x) (car (cddr x)))
-def caddr(x):
+def caddr(x: TCons[T0, TCons[T1, TCons[T2, T3]]]) -> T2:
     return car(cddr(x))
 
 
@@ -453,14 +532,59 @@ def get(k, kvs, f=unset):
         if dictp(it := cdr(kvs[-1])):
             kvs = it
         elif modulep(it):
-            kvs = it.__dict__
+            kvs = it
         else:
             return nil
+    if modulep(kvs):
+        kvs = kvs.__dict__
     assert f in [equal, id]
     out = Cell(kvs, k, unset)
     if cdr(out) is unset:
         return nil
     return out
+
+def get(k, kvs, f=unset, new=nil):
+    return locate(k, kvs, new, f)
+
+def alistp(kvs):
+    return consp(kvs) and consp(car(kvs))
+
+def locatable(kvs):
+    return dictp(kvs) or modulep(kvs)
+
+def locate(k, kvs, new=nil, f=unset):
+    if f is unset:
+        f = equal
+    if null(kvs):
+        return kvs
+    if isinstance(kvs, Cons):
+        for tail in kvs:
+            cell = car(tail)
+            if locatable(cell):
+                if yes(it := locate(k, cell, new, f)):
+                    return it
+            else:
+                assert alistp(tail)
+                name, value = car(cell), cdr(cell)
+                if yes(f(k, name)):
+                    if value is unset:
+                        if yes(new):
+                            xdr(cell, nil)
+                        else:
+                            continue
+                    return cell
+    else:
+        if yes(new) and kvs in [py, M]:
+            return nil
+        cell = Cell(kvs, k, unset)
+        if cdr(cell) is unset:
+            if yes(new):
+                xdr(cell, nil)
+            else:
+                return nil
+        return cell
+
+
 
 
 # (def put (k v kvs (o f =))
@@ -579,7 +703,7 @@ def fn(parms, *body):
 def literal(e):
     if in_(e, t, nil, o, apply):
         return t
-    elif in_(type(e), quote("char"), quote("stream"), quote("table")):
+    elif in_(type(e), quote("char"), quote("stream"), quote("tab"), quote("char")):
         return t
     elif caris(e, quote("lit")):
         return t
@@ -591,25 +715,26 @@ def literal(e):
         return t
     elif string_literal_p(e):
         return t
+    elif keyword(e):
+        return True
     else:
         return string(e)
 
-def string_literal_p(e):
-    if not isinstance(e, str):
-        return False
-    if len(e) <= 0:
-        return False
-    if e.startswith('"') and e.endswith('"'):
-        return True
-    if e.startswith('-'):
-        e = e[1:]
-    if len(e) <= 0:
-        return False
-    return e[0].isdigit()
+namecs = dict(
+    bel="\a",
+    tab="\t",
+    lf="\n",
+    cr="\r",
+    sp=" ")
 
 def evliteral(e):
-    if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
+    # if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
+    if string_literal_p(e):
         return json.loads(e)
+    if char(e):
+        e: str
+        name = e[1:]
+        return namecs.get(name, name)
     return e
 
 # (def variable (e)
@@ -625,7 +750,8 @@ def variable(e):
 # (def isa (name)
 #   [begins _ `(lit ,name) id])
 def isa(name):
-    return lambda _: begins(_, list(quote("lit"), name), id)
+    return lambda _: or_f(lambda: begins(_, list(quote("lit"), name), id),
+                          lambda: equal(type(_), name))
 
 # (def bel (e (o g globe))
 #   (ev (list (list e nil))
@@ -666,8 +792,6 @@ def bel(e, g=unset, a=unset, p=unset):
     s = nil
     r = nil
     if jump := mev_tail.get():
-        # s = jump.thread.s
-        # r = jump.thread.r
         p_g = jump.p_g
         if g is unset:
             g = cadr(p_g)
@@ -677,9 +801,10 @@ def bel(e, g=unset, a=unset, p=unset):
             p = car(p_g)
     else:
         if g is unset:
-            g = M
+            g = list(G, M, py)
         if a is unset:
-            a = G
+            # a = list(G)
+            a = nil
         if p is unset:
             p = nil
     return tev(cons(list(e, a), s),
@@ -740,6 +865,9 @@ value stack, and m is a list (p g) of the other threads and the
 global bindings.
 """
 
+# BelThreadCar: TypeAlias = "ConsList[BelExpression]"
+TBelThread: TypeAlias = "Union[List2[ConsList[TBelExpression], ConsList[T]], BelThread]"
+
 class BelThread(Cons):
     """Each thread is a list
 
@@ -748,26 +876,58 @@ class BelThread(Cons):
     of two stacks: a stack s of expressions to be evaluated, and a stack
     r of return values.
     """
+    car: ConsList[BelExpression]
+    # def __init__(self):
+    #     super().__init__(car=nil, cdr=list(nil))
     @property
-    def s(self) -> List[BelExpression]:
-        return map(BelExpression.new, car(self)).list()
+    def s(self: TBelThread) -> ConsList[BelExpression]:
+        return map(BelExpression.new, car(self))
     @property
-    def r(self) -> Optional[Cons]:
+    def r(self: TBelThread) -> ConsList[T]:
         return cadr(self)
     def __repr__(self):
         # return f"BelThread(s={self.s!r}, r={self.r!r})"
         return repr_self(self, ("s", None), ("r", None))
 
+TBelExpression: TypeAlias = "Union[List2[T, TA], BelExpression]"
+
 class BelExpression(Cons):
     @property
-    def e(self) -> Optional[Cons]:
+    def e(self) -> T:
         return car(self)
     @property
-    def a(self) -> Optional[Cons]:
+    def a(self) -> TA:
         return cadr(self)
     def __repr__(self):
         # return f"BelExpression(e={self.e!r})"
         return repr_self(self, ("e", None), ("a", None))
+
+TBelThreads: TypeAlias = "Union[List2[ConsList[TBelThread], TG], BelThreads]"
+
+class BelThreads(Cons):
+    """m is a list (p g) of the other threads and the
+    global bindings."""
+    @property
+    def p(self) -> ConsList[BelThread]:
+        return map(BelThread.new, car(self))
+    @property
+    def g(self) -> TG:
+        return cadr(self)
+
+
+def _check():
+    p_g: TBelThreads = nil
+    # car(p_g.p)
+    # car(p_g.p).s
+    p, g = car(p_g), cadr(p_g)
+    # s_r: TBelThread = nil
+    s_r = car(p)
+    s_r.s.car.a
+    car(s_r.s)
+    s, r = car(s_r), cadr(s_r)
+    e_a = car(s)
+    e, a = car(e_a), cadr(e_a)
+
 
 
 # class BelParameters(Cons):
@@ -783,7 +943,7 @@ class BelExpression(Cons):
 
 
 class JumpToMev(Exception):
-    def __init__(self, s, r, p_g: Cons, prev: Optional[JumpToMev]):
+    def __init__(self, s: TS, r: TR, p_g: TBelThreads, prev: Optional[JumpToMev]):
         self.s = s
         self.r = r
         self.p_g = p_g
@@ -791,24 +951,52 @@ class JumpToMev(Exception):
 
     @property
     def thread(self):
-        return BelThread(self.s, self.r)
+        return BelThread.new(cons(self.s, self.r))
+
+    @property
+    def expr(self):
+        for expr in self.thread.s:
+            if yes(expr.a):
+                return expr.e
 
     @property
     def lexenv(self):
         for expr in self.thread.s:
             if yes(expr.a):
                 return expr.a
-        # if self.prev:
-        #     return self.prev.lexenv
 
     def __repr__(self):
-        # return f"JumpToMev(e={map(car, self.s)!r}, r={self.r!r}, p={map(car, car(self.p_g))!r}, prev={self.prev!r})"
         return repr_self(self, ("lexenv", None), ("thread", None), ("prev", None))
 
     def __str__(self):
         return repr(self)
 
 mev_tail = CV.ContextVar[JumpToMev]("mev_tail", default=None)
+
+def frame(e: TE = unset, a: TA = unset, s: TS = unset, r: TR = unset, m: TM = unset, p: TP = unset, g: TG = unset):
+    jump = mev_tail.get()
+    if e is unset:
+        e = jump.expr if jump else nil
+    if a is unset:
+        a = jump.lexenv if jump else M
+    if s is unset:
+        s = jump.s if jump else list(list(e, a))
+    if r is unset:
+        r = jump.r if jump else nil
+    # if m is unset:
+    #     m = jump.p_g if jump else nil
+    # if jump is None:
+    #     if s is unset:
+    #         s = nil
+    #     if r is unset:
+    #         r = nil
+    #     if p is unset:
+    #         assert m is unset, "Can't speecify p and m"
+    #     if g is unset:
+    #         assert m is unset, "Can't speecify p and m"
+    #     if m is unset:
+    #         assert p is unset and g is unset
+    #         # m = list(nil,
 
 # def let_mev(s, r, p_g):
 #     JumpToMev(s, r, p_g)
@@ -928,7 +1116,7 @@ def ev(ea_s, r, m):
         return vref(e, a, s, r, m)
     elif no(proper(e)):
         return sigerr(quote("malformed"), s, r, m)
-    elif yes(it := get(car(e), forms, id)):
+    elif yes(it := get(car(e), forms, id, car(inwhere(s)))):
         return cdr(it)(cdr(e), a, s, r, m)
     else:
         return evcall(e, a, s, r, m)
@@ -965,15 +1153,39 @@ def vref(k, a, s, r, m):
         else:
             return sigerr(list(quote("unboundb"), k), s, r, m)
 
+def vscope(a, g):
+    if not null(a):
+        for tail in a:
+            if dictp(it := cdr(tail)):
+                return it
+    return g
+
+def assign(where, v):
+    assert not null(where)
+    cell, loc = car(where), cdr(where)
+    return case_f(loc,
+                  quote("a"), lambda: xar(cell, v),
+                  quote("d"), lambda: xdr(cell, v),
+                  lambda: err(quote("cannot-assign"), loc, cell))()
+
+# def xset(k, v, kvs):
+#     assert not null(kvs)
+#     if consp(kvs):
+#         cell = cons(k, v)
+#         xdr(kvs, cons(cell, cdr(kvs)))
+#     else:
+#         cell = Cell(kvs, k, nil)
+#         xdr(cell, v)
+#     return cell
+
 def xset(k, v, kvs):
-    assert not null(kvs)
-    if consp(kvs):
+    if yes(cell := locate(k, kvs, quote("new"))):
+        return assign(cons(cell, quote("d")), v)
+    elif consp(kvs):
         cell = cons(k, v)
         xdr(kvs, cons(cell, cdr(kvs)))
     else:
-        cell = Cell(kvs, k, nil)
-        xdr(cell, v)
-    return cell
+        return err(quote("cannot-set"), k)
 
 # (set smark (join))
 smark = join("%smark")
@@ -996,8 +1208,8 @@ def inwhere(s):
 #         globe (cons e g))))
 def lookup(e, a, s, r, p, g):
     return or_f(lambda: binding(e, s),
-                lambda: get(e, a, id),
-                lambda: get(e, g, id),
+                lambda: get(e, a, id, car(inwhere(s))),
+                lambda: get(e, g, id, car(inwhere(s))),
                 lambda: case_f(e,
                                quote("scope"), lambda: cons(e, a),
                                quote("stack"), lambda: cons(e, s),
@@ -1014,7 +1226,8 @@ def binding(k, s):
     return get(k,
                map(caddr, keep(lambda _: begins(_, list(smark, quote("bind")), id),
                                map(car, s))),
-               id)
+               id,
+               inwhere(s))
 
 # (def sigerr (msg s r m)
 #   (aif (binding 'err s)
@@ -1030,12 +1243,68 @@ def sigerr(msg, s, r, m):
         else:
             return err(quote("no-err"), msg)
 
+
+# TS = TypeVar("TS", bound=Cons)
+# TR = TypeVar("TR", bound=Cons)
+# TG = TypeVar("TG", bound=Dict[str, Any])
+# TP = TypeVar("TP", bound=Cons)
+# TM = TypeVar("TM", bound=Cons[TG, TP])
+
+
+def _check():
+    # a: TA[T] = nil
+    # e_a: TE_A = nil
+    p_g: TM = nil
+    p, g = car(p_g), cadr(p_g)
+    s_r = car(p)
+    s, r = car(s_r), cadr(s_r)
+    e_a = car(s)
+    e, a = car(e_a), cadr(e_a)
+    cell = car(a)
+    k, v = car(cell), cdr(cell)
+
+
+
+    # class TM(Cons[Tuple[TP, ...], Cons[TG, None]]): ...
+    # TM = Union[TM, Cons[ConsList[TP], Cons[TG, None]]]
+    # TM = List2[Tuple[TP, ...], TG]
+    # TM: TypeAlias = "List2[TP, TG]"
+
+    zz: List2[int, str] = list(42, "b")
+    car(zz)
+    cdr(zz)
+    car(cdr(zz))
+    cadr(zz)
+    cddr(zz)
+
+    # @overload
+    # def car(x: TM) -> ConsList[TP]: ...
+    # @overload
+    # def cdr(x: TM) -> Cons[TG, None]: ...
+    # @overload
+    # def cadr(x: TM) -> TG: ...
+
+    # m: TM
+    # m.car.car.cdr.car
+    # car(cdr(car(m)))
+    # p, g = car(m), car(cdr(m))
+    # # s, r = car(car(p)), cadr(car(p))
+    # s_r: TThread = car(p)
+    # # s, r = car(s_r), car(cdr(s_r))
+    # s, r = car(s_r), cadr(s_r)
+    # car(s), cadr(s)
+    # cadr(list(1,2))
+
+
+
+
 # (mac fu args
 #   `(list (list smark 'fut (fn ,@args)) nil))
 # def fu(f):
 #     return list(list(smark, quote("fut"), f), nil)
-def fu(a):
-    def fut(f):
+def fu(a: Cons):
+
+    def fut(f: Callable[[TS, TR, TM], Any]):
         return list(list(smark, quote("fut"), f), a)
     return fut
 
@@ -1437,7 +1706,7 @@ def applylit(f, args, a, s, r, m):
             else:
                 return sigerr(quote("bad-cont"), s, r, m)
         def do_virfns():
-            if yes(it := get(tag, virfns)):
+            if yes(it := get(tag, virfns, unset, car(inwhere(s)))):
                 e = cdr(it)(f, map(lambda _: list(quote("quote"), _), args))
                 return mev(cons(list(e, a), s), r, m)
             else:
@@ -1498,7 +1767,7 @@ def loc_print(_f, args, _a, s, r, m):
 def loc_is_get(_f, args, _a, s, r, m):
     # print("loc_is_get", _f, args, car(s), car(r))
     k, kvs = car(args), cadr(args)
-    cell = get(k, kvs)
+    cell = get(k, kvs, unset, car(inwhere(s)))
     if null(cell):
         if yes(car(inwhere(s))):
             cell = xset(k, nil, kvs)
@@ -1561,8 +1830,8 @@ def oktoparm(x):
 # (set prims '((id join xar xdr wrb ops)
 #              (car cdr type sym nom rdb cls stat sys)
 #              (coin)))
-prims = list(list(quote("id"), quote("join"), quote("xar"), quote("xdr"), quote("xrb"), quote("ops"), quote("print")),
-             list(quote("car"), quote("cdr"), quote("type"), quote("sym"), quote("nom"), quote("rdb"), quote("cls"), quote("stat"), quote("sys")),
+prims = list(list(quote("id"), quote("join"), quote("xar"), quote("xdr"), quote("xrb"), quote("ops"), quote("sys")),
+             list(quote("car"), quote("cdr"), quote("type"), quote("sym"), quote("nom"), quote("rdb"), quote("cls"), quote("stat"), quote("print")),
              list(quote("coin")))
 
 # (def applyprim (f args s r m)
@@ -1609,13 +1878,13 @@ def applyprim(f, args, s, r, m):
                            quote("xdr"), lambda: xdr(a, b),
                            quote("sym"), lambda: sym(a),
                            quote("nom"), lambda: nom(a),
-                           # quote("wrb"), lambda: wrb(a, b),
-                           # quote("rdb"), lambda: rdb(a),
-                           # quote("ops"), lambda: ops(a, b),
-                           # quote("cls"), lambda: cls(a),
-                           # quote("stat"), lambda: stat(a),
-                           # quote("coin"), lambda: coin(),
-                           # quote("sys"), lambda: sys(a),
+                           quote("wrb"), lambda: wrb(a, b),
+                           quote("rdb"), lambda: rdb(a),
+                           quote("ops"), lambda: ops(a, b),
+                           quote("cls"), lambda: cls(a),
+                           quote("stat"), lambda: stat(a),
+                           quote("coin"), lambda: coin(),
+                           quote("shell"), lambda: shell(a, b),
                            quote("print"), lambda: print(a),
                            lambda: sigerr(quote("bad-prim"), s, r, m))()
             except Exception as v:
@@ -1764,7 +2033,9 @@ def protected(x):
 #
 # (def con (x)
 #   (fn args x))
-#
+def con(x):
+    return lambda *args, **kws: x
+
 # (def compose fs
 #   (reduce (fn (f g)
 #             (fn args (f (apply g args))))
@@ -1781,17 +2052,27 @@ def compose2(f, g):
     f_then_g.__qualname__ = f_then_g.__name__ = f"{f_name}:{g_name}"
     return f_then_g
 
-#
 # (def combine (op)
 #   (fn fs
 #     (reduce (fn (f g)
 #               (fn args
 #                 (op (apply f args) (apply g args))))
 #             (or fs (list (con (op)))))))
-#
+def combine_f(op):
+    def combiner(*fs):
+        def combine2(f, g):
+            def combined(*args, **kws):
+                return op(lambda: apply(f, args, **kws),
+                          lambda: apply(g, args, **kws))
+            return combined
+        return reduce(combine2, fs or list(con(op())))
+    return combiner
+
 # (set cand (combine and)
 #      cor  (combine or))
-#
+cand = combine_f(and_f)
+cor = combine_f(or_f)
+
 # (def foldl (f base . args)
 #   (if (or (no args) (some no args))
 #       base
@@ -1807,24 +2088,43 @@ def compose2(f, g):
 #
 # (def of (f g)
 #   (fn args (apply f (map g args))))
-#
+def of(f, g):
+    def f_of_g(*args, **kws):
+        return apply(f, map(g, args), **kws)
+    return f_of_g
+
 # (def upon args
 #   [apply _ args])
-#
+def upon(*args, **kws):
+    return lambda _: apply(_, args, **kws)
+
 # (def pairwise (f xs)
 #   (or (no (cdr xs))
 #       (and (f (car xs) (cadr xs))
 #            (pairwise f (cdr xs)))))
-#
+def pairwise(f, xs):
+    return or_f(lambda: no(cdr(xs)),
+                lambda: and_f(lambda: f(car(xs), cadr(xs)),
+                              lambda: pairwise(f, cdr(xs))))
+
 # (def fuse (f . args)
 #   (apply append (apply map f args)))
-#
+def fuse(f, *args, **kws):
+    return apply(append, apply(map, f, args, **kws))
+
 # (mac letu (v . body)
 #   (if ((cor variable atom) v)
 #       `(let ,v (uvar) ,@body)
 #       `(with ,(fuse [list _ '(uvar)] v)
 #          ,@body)))
-#
+@macro_
+def letu(v, *body):
+    if yes(cor(variable, atom)(v)):
+        return list(quote("let"), v, list(quote("uvar")), *body)
+    else:
+        return list(quote("with"), fuse(lambda _: list(_, list(quote("quote"), list(quote("uvar")))), v),
+                    *body)
+
 # (mac pcase (expr . args)
 #   (if (no (cdr args))
 #       (car args)
@@ -1833,7 +2133,8 @@ def compose2(f, g):
 #            (if (,(car args) ,v)
 #                ,(cadr args)
 #                (pcase ,v ,@(cddr args)))))))
-#
+
+
 # (def match (x pat)
 #   (if (= pat t)                t
 #       (function pat)           (pat x)
@@ -1920,8 +2221,8 @@ def unbound():
 # 'str' object has no attribute 'car'
 # 'hello'
 
-def vec2list(v):
-    if py.isinstance(v, py.list):
+def vec2list(v: Optional[List[T]]) -> Optional[Union[T, ConsList[T]]]:
+    if py.isinstance(v, (py.list, py.tuple)):
         if len(v) >= 3 and v[-2] == ".":
             l = vec2list(v[0:-2])
             xdr(l[-1], vec2list(v[-1]))
@@ -1929,15 +2230,115 @@ def vec2list(v):
         return list(*[vec2list(x) for x in v])
     return quote(v)
 
+def list2vec(l: Cons) -> Optional[List]:
+    if consp(l):
+        out: List[Any] = [list2vec(x) for x in mkproper(l).list()]
+        if no(proper(l)):
+            assert len(out) >= 2
+            out.insert(-1, ".")
+        return out
+    if null(l):
+        return []
+    return l
+
 # from lul.common import reader
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
 # [print(repr(x.car)) for x in vec2list(belforms)]
+
+sbits: Dict[int, List[str]] = collections.defaultdict(py.list)
+
+def rd(s: io.IOBase) -> Optional[int]:
+    if s.closed:
+        err("closed")
+    n = 0
+    for byte in s.read(1):
+        sbits[py.id(s)].extend(bin(byte)[2:].zfill(8)[::-1])
+        n += 8
+    return nil if n == 0 else n
+
+def rdb(s: io.IOBase):
+    if len(bits := sbits[py.id(s)]) > 0:
+        return bits.pop(0)
+
+def wrb(s: io.IOBase, c: str):
+    assert streamp(s)
+    assert c in "10"
+    bits = sbits[py.id(s)]
+    bits.append(c)
+    if len(bits) >= 8 and equal(stat(s), quote("out")):
+        byte = int(''.join(bits[0:8][::-1]), 2)
+        del bits[0:8]
+        s.write(bytes([byte]))
+        s.flush()
+
+def ops(x: str, y: Literal["out", "in"]) -> io.IOBase:
+    """12. (ops x y)
+
+    Returns a stream that writes to or reads from the place whose name is
+    the string x, depending on whether y is out or in respectively.
+    Signals an error if it can't, or if y is not out or in."""
+    if y not in ["out", "in"]:
+        err(quote("y-not-out-or-in"), list(quote("ops"), x, y))
+    s = open(x, "rb" if equal(y, "in") else "wb")
+    assert streamp(s)
+    return s
+
+def cls(x: io.IOBase):
+    """13. (cls x)
+
+    Closes the stream x. Signals an error if it can't."""
+    x.close()
+    try:
+        del sbits[py.id(x)]
+    except KeyError:
+        pass
+    return t
+
+def stat(x: io.IOBase):
+    """14. (stat x)
+
+    Returns either closed, in, or out depending on whether the stream x
+    is closed, or reading from or writing to something respectively.
+    Signals an error if it can't."""
+    if x.closed:
+        return quote("closed")
+    mode = getattr(x, "mode", "wb")
+    if mode.startswith("r"):
+        return quote("in")
+    return quote("out")
+
+# https://stackoverflow.com/questions/20936993/how-can-i-create-a-random-number-that-is-cryptographically-secure-in-python
+from random import SystemRandom
+coingen = SystemRandom()
+
+def coin():
+    """15. (coin)
+
+    Returns either t or nil randomly."""
+    return nil if coingen.randint(0, 1) == 0 else t
+
+import subprocess
+import shlex
+
+def shell(x, args=nil):
+    """16. (shell x args)
+
+    Sends x as a command to the operating system."""
+    cmd = ' '.join([x] + [shlex.quote(arg) for arg in list2vec(args)])
+    return subprocess.run(cmd, shell=True).returncode
+
+def read(x, eof=None):
+    if stringp(x):
+        form, pos = reader.read_from_string(x, mode="bel")
+        return form
+    else:
+        return reader.read(x, eof=eof)
 
 def readallbel(string):
     return vec2list(reader.read_all(reader.stream(string, mode="bel")))
 
 def readbel(string):
-    return vec2list(reader.read_from_string(string, mode="bel")[0])
+    return vec2list([0])
 
 def compilebel(source):
     form = readallbel(source)
@@ -2126,16 +2527,85 @@ def quasi(form):
 def quasiquote(form):
     return quasi(form)
 
+# (mac letu (v . body)
+#   (if ((cor variable atom) v)
+#       `(let ,v (uvar) ,@body)
+#       `(with ,(fuse [list _ '(uvar)] v)
+#          ,@body)))
+
+# (mac pcase (expr . args)
+#   (if (no (cdr args))
+#       (car args)
+#       (letu v
+#         `(let ,v ,expr
+#            (if (,(car args) ,v)
+#                ,(cadr args)
+#                (pcase ,v ,@(cddr args)))))))
+
+# (def bqex (e n)
+#   (if (no e)   (list nil nil)
+#       (atom e) (list (list 'quote e) nil)
+#                (case (car e)
+#                  bquote   (bqthru e (list n) 'bquote)
+#                  comma    (if (no n)
+#                               (list (cadr e) t)
+#                               (bqthru e (car n) 'comma))
+#                  comma-at (if (no n)
+#                               (list (list 'splice (cadr e)) t)
+#                               (bqthru e (car n) 'comma-at))
+#                           (bqexpair e n))))
+#
+# (def bqthru (e n op)
+#   (let (sub change) (bqex (cadr e) n)
+#     (if change
+#         (list (if (caris sub 'splice)
+#                   `(cons ',op ,(cadr sub))
+#                   `(list ',op ,sub))
+#               t)
+#         (list (list 'quote e) nil))))
+#
+# (def bqexpair (e n)
+#   (with ((a achange) (bqex (car e) n)
+#          (d dchange) (bqex (cdr e) n))
+#     (if (or achange dchange)
+#         (list (if (caris d 'splice)
+#                   (if (caris a 'splice)
+#                       `(apply append (spa ,(cadr a)) (spd ,(cadr d)))
+#                       `(apply cons ,a (spd ,(cadr d))))
+#                   (caris a 'splice)
+#                   `(append (spa ,(cadr a)) ,d)
+#                   `(cons ,a ,d))
+#               t)
+#         (list (list 'quote e) nil))))
+#
+# (def spa (x)
+#   (if (and x (atom x))
+#       (err 'splice-atom)
+#       x))
+#
+# (def spd (x)
+#   (pcase x
+#     no   (err 'splice-empty-cdr)
+#     atom (err 'splice-atom)
+#     cdr  (err 'splice-multiple-cdrs)
+#          x))
+
+
 #
 # (def nth (n|pint xs|pair)
 #   (if (= n 1)
 #       (car xs)
 #       (nth (- n 1) (cdr xs))))
-def nth(n, xs):
+def nth(n, xs, default=unset):
+    if default is unset:
+        default = nil
     if consp(xs):
         xs: Cons
         return car(xs[n-1])
-    return xs[n-1]
+    try:
+        return xs[n-1]
+    except IndexError:
+        return default
 
 # (vir num (f args)
 # `(nth ,f ,@args))
@@ -2148,13 +2618,12 @@ def vir_number(f, args):
 def table(kvs=unset) -> py.dict:
     if kvs is unset:
         kvs = nil
-    xs: Cons = vec2list(kvs)
-    return py.dict([(car(x), cdr(x)) for x in xs.list()])
+    return py.dict([(car(x), cdr(x)) for x in (vec2list(kvs).list() if not null(kvs) else [])])
 
 #
 # (vir tab (f args)
 #   `(tabref ,f ,@args))
-@vir_(quote("table"))
+@vir_(quote("tab"))
 def vir_table(f, args):
     return cons(quote("tabref"), f, args)
 
@@ -2298,3 +2767,8 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
     with letattr(sys, 'ps1', iterm2_prompt_mark + '> ', '>>> '):
         with letattr(sys, 'ps2', '  ', '... '):
             console.interact(banner, exitmsg)
+
+
+
+
+

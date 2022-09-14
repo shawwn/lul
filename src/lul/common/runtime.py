@@ -19,6 +19,7 @@ import types
 #     List = list
 #     Tuple = tuple
 
+import reprlib
 import re
 import io
 import keyword
@@ -26,9 +27,59 @@ import functools
 import builtins as py
 import collections.abc as std
 import abc # type: ignore
+from abc import *
 import collections # type: ignore
 import contextvars as CV
 import contextlib
+# from types import NoneType
+
+P = ParamSpec("P")
+R = TypeVar("R")
+S = TypeVar("S")
+T = TypeVar("T")
+U = TypeVar("U")
+
+P2 = ParamSpec("P2")
+R2 = TypeVar("R2")
+T0 = TypeVar("T0")
+T1 = TypeVar("T1")
+T2 = TypeVar("T2")
+T3 = TypeVar("T3")
+T4 = TypeVar("T4")
+T5 = TypeVar("T5")
+T6 = TypeVar("T6")
+T7 = TypeVar("T7")
+T8 = TypeVar("T8")
+T9 = TypeVar("T9")
+
+
+
+nil = None
+t = True
+
+unset: None = ["%unset"]
+
+def unbound():
+    return unset
+
+def unboundp(x):
+    return x is unset
+
+assert unboundp(unbound()) is True
+assert unbound() is unset
+
+def either(x: T, y: U, *, unset=unbound()) -> Union[T, U]:
+    return y if x is unset else y
+
+assert either(unbound(), 21) == 21
+assert either(unbound(), unset) is unset
+
+def init(thunk: Callable[[], T], val: Optional[T], *, unset=unbound()) -> T:
+    return thunk() if val is unset else val
+
+assert init(lambda: 21, unset) == 21
+assert init(lambda: 21, None) is None
+# assert init(lambda: cast(Cons[int, str], 21), None) is None
 
 @contextlib.contextmanager
 def CV_let(var: CV.ContextVar[T], val: T):
@@ -343,17 +394,6 @@ def lul_init():
 
 
 
-
-P = ParamSpec("P")
-R = TypeVar("R")
-T = TypeVar("T")
-U = TypeVar("U")
-
-P2 = ParamSpec("P2")
-R2 = TypeVar("R2")
-T0 = TypeVar("T0")
-T1 = TypeVar("T1")
-T2 = TypeVar("T2")
 
 def compiled_prefix():
     return "LISP_"
@@ -679,7 +719,7 @@ def values(x):
 # run_hook_with_args([print], file=42)
 
 def dispatch(after=None, around=None):
-    def inner(f):
+    def inner(f: Callable[P, R]) -> Callable[P, R]:
         func = functools.singledispatch(f)
         @functools.wraps(func)
         def wrapper(*args, **kws):
@@ -698,8 +738,10 @@ def dispatch(after=None, around=None):
         return wrapper
     return inner
 
+prrepr_ = [lambda x: x if py.isinstance(x, str) else repr(x)]
+
 def prrepr(x):
-    return x if py.isinstance(x, str) else repr(x)
+    return prrepr_[0](x)
 
 def prcons(self):
     if consp(self.cdr):
@@ -723,44 +765,198 @@ def prcons(self):
             s += [".", prrepr(cdr(tail))]
     return '(' + ' '.join(s) + ')'
 
-class Cons:
-    def __init__(self, car=None, cdr=None, set_car=None, set_cdr=None, get_car=None, get_cdr=None):
-        self.car_ = car
-        self.cdr_ = cdr
-        self.set_car = set_car
-        self.set_cdr = set_cdr
-        self.get_car = get_car
-        self.get_cdr = get_cdr
+A = TypeVar("A")
+D = TypeVar("D")
 
-    @classmethod
-    def new(cls, src: Cons):
-        return cls(src.car_, src.cdr_, src.set_car, src.set_cdr, src.get_car, src.get_cdr)
+class Freezable(ABC):
+    frozen_: Optional[Literal[False, True, "car", "cdr"]]
 
     @property
-    def car(self):
-        return self.get_car() if self.get_car else self.car_
+    def frozen(self):
+        return self.frozen_
+
+    @frozen.setter
+    def frozen(self, value: Optional[Literal[False, True, "car", "cdr"]]):
+        self.frozen_ = value
 
     @property
-    def cdr(self):
-        return self.get_cdr() if self.get_cdr else self.cdr_
+    def frozen_car(self) -> bool:
+        return self.frozen is True or self.frozen == "car"
+
+    @property
+    def frozen_cdr(self) -> bool:
+        return self.frozen is True or self.frozen == "cdr"
+
+    def __init__(self, *, frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
+        self.frozen_ = frozen
+
+class HasCar(Generic[A, D], Freezable):
+    # frozen: Optional[Literal[False, True, "car"]]
+    car_: Optional[A]
+    # get_car: Optional[Callable[[HasCar[A, D]], A]]
+    # set_car: Optional[Callable[[HasCar[A, D], A], A]]
+
+    def __init__(self,
+                 car: Optional[A] = unset,
+                 # get_car: Optional[Callable[[HasCar[A, D]], A]] = None,
+                 # set_car: Optional[Callable[[HasCar[A, D], A], A]] = None,
+                 frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
+        super().__init__(frozen=frozen)
+        self.car_ = init(self.car_default, car)
+        # self.set_car = set_car
+        # self.get_car = get_car
+
+    def car_default(self) -> A:
+        return unset
+
+    @property
+    def car(self) -> A:
+        # return self.get_car(self) if self.get_car else self.car_
+        return self.car_
 
     @car.setter
-    def car(self, value):
-        if self.set_car:
-            self.set_car(value)
-        else:
-            self.car_ = value
+    def car(self, value: Optional[A]):
+        self.set_car(value)
+        # if self.set_car:
+        #     self.set_car(self, value)
+        # else:
+        #     self.car_ = value
+
+    def check_frozen_car(self):
+        if self.frozen_car:
+            error("Can't set frozen car")
+
+    def set_car(self, value: Optional[A]) -> Optional[A]:
+        self.check_frozen_car()
+        self.car_ = value
+        return value
+
+class HasCdr(Generic[A, D], Freezable):
+    # frozen: Optional[Literal[False, True, "cdr"]]
+    cdr_: Optional[D]
+    # get_cdr: Optional[Callable[[HasCdr[A, D]], D]]
+    # set_cdr: Optional[Callable[[HasCdr[A, D], D], D]]
+
+    def __init__(self,
+                 cdr: Optional[D] = unset,
+                 # get_cdr: Optional[Callable[[HasCdr[A, D]], D]] = None,
+                 # set_cdr: Optional[Callable[[HasCdr[A, D], A], D]] = None,
+                 frozen: Optional[Literal[False, True, "cdr", "cdr"]] = False):
+        super().__init__(frozen=frozen)
+        self.cdr_ = init(self.cdr_default, cdr)
+        # self.set_cdr = set_cdr
+        # self.get_cdr = get_cdr
+
+    def cdr_default(self) -> D:
+        return unset
+
+    @property
+    def cdr(self) -> D:
+        # return self.get_cdr(self) if self.get_cdr else self.cdr_
+        return self.cdr_
 
     @cdr.setter
-    def cdr(self, value):
-        if self.set_cdr:
-            self.set_cdr(value)
-        else:
-            self.cdr_ = value
+    def cdr(self, value: Optional[D]):
+        self.set_cdr(value)
+        # if self.set_cdr:
+        #     self.set_cdr(self, value)
+        # else:
+        #     self.cdr_ = value
+
+    def check_frozen_cdr(self):
+        if self.frozen_cdr:
+            error("Can't set frozen cdr")
+
+    def set_cdr(self, value: Optional[D]) -> Optional[D]:
+        self.check_frozen_cdr()
+        self.cdr_ = value
+        return value
+
+class FrozenCar(HasCar[A, D]):
+    def __init__(self, car: Optional[A] = unset, *, frozen: Optional[Literal[False, True, "cdr", "cdr"]] = "car"):
+        assert frozen is True or frozen == "car"
+        super().__init__(car, frozen=frozen)
+
+class FrozenCdr(HasCdr[A, D]):
+    def __init__(self, cdr: Optional[D] = unset, *, frozen: Optional[Literal[False, True, "cdr", "cdr"]] = "cdr"):
+        assert frozen is True or frozen == "cdr"
+        super().__init__(cdr, frozen=frozen)
+
+# class HasCdr(Freezable[A, D]):
+#     frozen: Optional[Literal[False, True, "cdr"]]
+#     cdr_: Optional[D]
+#     get_cdr: Optional[Callable[[HasCdr[A, D]], D]]
+#     set_cdr: Optional[Callable[[HasCdr[A, D], D], D]]
+#
+#     @property
+#     def cdr(self: HasCdr[A, D]) -> D:
+#         return self.get_cdr(self) if self.get_cdr else self.cdr_
+#
+#     @cdr.setter
+#     def cdr(self: HasCdr[A, D], value: D):
+#         if self.frozen in [True, "cdr"]:
+#             error("Can't set frozen cdr")
+#         if self.set_cdr:
+#             self.set_cdr(self, value)
+#         else:
+#             self.cdr_ = value
+
+@functools.total_ordering
+class Cons(HasCar[A, D], HasCdr[A, D]):
+    def __init__(self,
+                 car: Optional[A] = unset,
+                 cdr: Optional[D] = unset,
+                 # set_car: Optional[Callable[[Cons[A, D], D], D]] = None,
+                 # set_cdr: Optional[Callable[[Cons[A, D], A], A]] = None,
+                 # get_car: Optional[Callable[[Cons[A, D]], A]] = None,
+                 # get_cdr: Optional[Callable[[Cons[A, D]], D]] = None,
+                 frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
+        HasCar.__init__(self, car=car, frozen=frozen)
+        HasCdr.__init__(self, cdr=cdr, frozen=frozen)
+        # super(HasCar, self).__init__(self, car=car, frozen=frozen)
+        # self.car_ = car
+        # self.cdr_ = cdr
+        # self.set_car = set_car
+        # self.set_cdr = set_cdr
+        # self.get_car = get_car
+        # self.get_cdr = get_cdr
+        # self.frozen = frozen
+
+
+    @classmethod
+    def new(cls: Type[T], src: Cons[A, D]) -> T:
+        # return cls(src.car_, src.cdr_, src.set_car, src.set_cdr, src.get_car, src.get_cdr)
+        return cls(src.car_, src.cdr_, frozen=src.frozen_)
+
+    # @property
+    # def car(self) -> A:
+    #     return self.get_car() if self.get_car else self.car_
+    #
+    # @property
+    # def cdr(self) -> D:
+    #     return self.get_cdr() if self.get_cdr else self.cdr_
+    #
+    # @car.setter
+    # def car(self, value: A):
+    #     if self.frozen in [True, "car"]:
+    #         error("Can't set frozen car")
+    #     if self.set_car:
+    #         self.set_car(value)
+    #     else:
+    #         self.car_ = value
+    #
+    # @cdr.setter
+    # def cdr(self, value: D):
+    #     if self.frozen in [True, "cdr"]:
+    #         error("Can't set frozen cdr")
+    #     if self.set_cdr:
+    #         self.set_cdr(value)
+    #     else:
+    #         self.cdr_ = value
 
     def __iter__(self):
-        tortoise = self
-        hare = self
+        tortoise: Optional[Cons[A, D]] = self
+        hare: Optional[Cons[A, D]] = self
         while consp(hare):
             yield hare
             hare = cdr(hare)
@@ -772,19 +968,29 @@ class Cons:
             if eq(hare, tortoise):
                 raise CircularIteration()
 
-    def list(self):
-        return [car(x) for x in self]
+    def list(self, proper=True):
+        if null(self):
+            return []
+        tail = nil
+        return [car(tail := x) for x in self] + ([] if proper or null(cdr(tail)) or not consp(cdr(tail)) else [".", cdr(tail)])
 
+    @overload
+    def at(self, i: Optional[int]) -> Cons[A, D]: ...
+    @overload
+    def at(self, i: slice) -> List[Cons[A, D]]: ...
     def at(self, i):
         return self.list()[i]
 
-    # @recursive_repr
+    def cut(self, i: Optional[int] = None, j: Optional[int] = None):
+        return self.at(slice(i, j))
+
+    @reprlib.recursive_repr()
     def __repr__(self):
         # return f'Cons({car(self)!r}, {cdr(self)!r})'
         return prcons(self)
 
     def __getitem__(self, item):
-        return [x for x in self][item]
+        return nil if null(self) else ([x for x in self][item])
         # for tail in self:
         #     if item <= 0:
         #         break
@@ -795,51 +1001,181 @@ class Cons:
 
     def __len__(self):
         n = 0
-        for tail in self:
-            n += 1
+        if not null(self):
+            for tail in self:
+                n += 1
         return n
 
-class Cell(Cons):
-    def __init__(self, kvs, k, *default, get_car=None, set_car=None, get_cdr=None, set_cdr=None):
+    def __lt__(self, other):
+        if car(self) == car(other):
+            return cdr(self) < cdr(other)
+        else:
+            return car(self) < car(other)
+
+    def __eq__(self, other: Optional[Cons[A, D]]):
+        return isinstance(other, Cons) and car(self) == car(other) and cdr(self) == cdr(other)
+
+    def __hash__(self):
+        if self.frozen is True:
+            return hash((car(self), cdr(self)))
+        else:
+            return hash(py.id(self))
+
+ConsListType = TypeVar("ConsListType", bound="ConsList")
+
+class ConsList(Cons[A, Optional[ConsListType]]):
+    @property
+    def cdr(self) -> Optional[ConsList[A]]:
+        return super().cdr
+    @cdr.setter
+    def cdr(self, value: ConsList[A]):
+        super().cdr = value
+
+    def set_cdr(self, value: Optional[ConsList[A]]) -> Optional[ConsList[A]]:
+        return super().set_cdr(value)
+
+
+if TYPE_CHECKING:
+    ConsList = Union[Cons[A, None], Tuple[A, ...]]
+
+def _check():
+    foo: ConsList[int] = Cons("foo",None)
+    foo.set_cdr(21)
+    foo.set_cdr("asdf")
+    foo.set_cdr(nil)
+    foo.set_car("ok")
+    foo.set_car(420)
+    foo.set_car(nil)
+    foo.set_cdr((1,2,3))
+    foo.set_cdr(("a",2,3))
+    foo.set_cdr(nil)
+
+
+class SupportsHash(Protocol):
+    @abstractmethod
+    def __eq__(self, other):
+        raise NotImplementedError
+    @abstractmethod
+    def __hash__(self):
+        raise NotImplementedError
+
+class Cell(Cons[SupportsHash, D]):
+    # car: str
+    # cdr: D
+    # car: Tuple[A, Dict[A, D]]
+    # cdr: D
+
+    def __init__(self, kvs: Dict[SupportsHash, D], k: SupportsHash, *default: Optional[D],
+                 frozen: Optional[Literal[False, True, "car", "cdr"]] = "car",
+                 # get_car=None, set_car=None, get_cdr=None, set_cdr=None,
+                 ):
         if modulep(kvs):
             kvs = kvs.__dict__
-        if get_cdr is None:
-            def get_cdr():
-                if isinstance(kvs, std.Mapping):
-                    return kvs.get(self.car, *default)
-                else:
-                    assert not consp(kvs)
-                    return getattr(kvs, k, *default)
-        if set_cdr is None:
-            def set_cdr(v):
-                if isinstance(kvs, std.Mapping):
-                    if isinstance(kvs, std.MutableMapping):
-                        kvs[self.car] = v
-                    else:
-                        raise Error("Can't update non-mutable mapping")
-                else:
-                    assert not consp(kvs)
-                    setattr(kvs, k, v)
-        super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
+        # if get_cdr is None:
+        #     def get_cdr(self: Cons[str, D]) -> D:
+        #         if isinstance(kvs, std.Mapping):
+        #             return kvs.get(self.car, *default)
+        #         else:
+        #             assert not consp(kvs)
+        #             return getattr(kvs, k, *default)
+        # if set_cdr is None:
+        #     def set_cdr(v):
+        #         if isinstance(kvs, std.Mapping):
+        #             if isinstance(kvs, std.MutableMapping):
+        #                 kvs[self.car] = v
+        #             else:
+        #                 raise Error("Can't update non-mutable mapping")
+        #         else:
+        #             assert not consp(kvs)
+        #             setattr(kvs, k, v)
+        # super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
+        super().__init__(car=(k, kvs), cdr=default, frozen=frozen)
+
+    @property
+    def key(self) -> Union[str, SupportsHash]:
+        k, kvs = self.car_
+        return k
+
+    @property
+    def kvs(self) -> Dict[SupportsHash, D]:
+        k, kvs = self.car_
+        return kvs
+
+    @property
+    def car(self) -> SupportsHash:
+        return self.key
+
+    @property
+    def default(self) -> Tuple[Optional[D], ...]:
+        return self.cdr_
+
+    @property
+    def cdr(self) -> D:
+        k, kvs = self.key, self.kvs
+        default = self.default
+        if isinstance(kvs, std.Mapping):
+            return kvs.get(k, *default)
+        else:
+            assert isinstance(k, str)
+            assert not consp(kvs)
+            return getattr(kvs, k, *default)
+
+    @cdr.setter
+    def cdr(self, value):
+        self.set_cdr(value)
+
+    def set_cdr(self, v: Optional[D]) -> Optional[D]:
+        k, kvs = self.key, self.kvs
+        if isinstance(kvs, std.Mapping):
+            if isinstance(kvs, std.MutableMapping):
+                kvs[k] = v
+            else:
+                raise Error("Can't update non-mutable mapping")
+        else:
+            assert isinstance(k, str)
+            assert not consp(kvs)
+            setattr(kvs, k, v)
+        return v
+
+    # def cdr_default(self) -> D:
+    #     return self.default[0]
+
+# if TYPE_CHECKING:
+#     Cell = Optional[Cons[Tuple[SupportsHash, Dict[SupportsHash, D]], D]]
+
+# if TYPE_CHECKING:
+#     # class Cell(Cons[str, D], HasCdr[D]):
+#     #     ...
+#     Cell: Type[Union[Cell[D], Cons[str, D], HasCdr[D]]]
 
 @dispatch()
-def XCONS(x):
+def XCONS(x: Union[Cons[A, D], Tuple[A, ...], List[A], Dict[A, D]]) -> Cons[A, D]:
     assert isinstance(x, Cons)
     return x
 
+@overload
+def XCONS_tuple(x: Tuple[A, D]) -> Cons[A, D]: ...
+@overload
+def XCONS_tuple(x: Tuple[A, ...]) -> ConsList[A]: ...
+
 @XCONS.register(tuple)
-def XCONS_tuple(x, set_car=None, set_cdr=None):
+@XCONS.register(list)
+def XCONS_tuple(x): #, set_car=None, set_cdr=None):
     if x:
         # return Cons(x[0], XCONS(x[1:]))
         xs = tuple(reversed(x))
         out = nil
         while xs:
-            out = Cons(xs[0], out, set_car, set_cdr)
+            # out = Cons(xs[0], out, set_car, set_cdr)
+            out = Cons(xs[0], out)
             xs = xs[1:]
         return out
     else:
         return nil
 
+def _check():
+    XCONS_tuple((1,"foo"))
+    XCONS_tuple((1,2,3))
 # @XCONS.register(dict)
 # def XCONS_dict(x):
 #     def set_car(v):
@@ -851,58 +1187,120 @@ def XCONS_tuple(x, set_car=None, set_cdr=None):
 #         return set_cdr
 #     # return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()))
 #     return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()), set_car, set_car)
-
-@XCONS.register(std.Mapping)
-def XCONS_dict(kvs: dict):
-    def set_car(v):
-        raise Error("Can't set frozen car")
-    def set_cdr(v):
-        raise Error("Can't set frozen cdr")
-    return XCONS_tuple(tuple(Cell(kvs, k, set_car=set_car, set_cdr=set_cdr) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
-
-@XCONS.register(std.MutableMapping)
-def XCONS_dict(kvs: dict):
-    def set_car(v):
-        raise Error("Can't set frozen car")
-    def set_cdr(v):
-        raise Error("Can't set frozen cdr")
-    return XCONS_tuple(tuple(Cell(kvs, k, set_car=set_car) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
+#
+# @XCONS.register(std.Mapping)
+# def XCONS_dict(kvs: dict):
+#     def set_car(v):
+#         raise Error("Can't set frozen car")
+#     def set_cdr(v):
+#         raise Error("Can't set frozen cdr")
+#     return XCONS_tuple(tuple(Cell(kvs, k, frozen=True) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
+#
+# @XCONS.register(std.MutableMapping)
+# def XCONS_dict(kvs: dict):
+#     def set_car(v):
+#         raise Error("Can't set frozen car")
+#     def set_cdr(v):
+#         raise Error("Can't set frozen cdr")
+#     return XCONS_tuple(tuple(Cell(kvs, k, set_car=set_car) for k in kvs.keys()), set_car=set_car, set_cdr=set_cdr)
 
 @dispatch()
-def consp(x):
+def consp(x) -> bool:
     return isinstance(x, Cons)
 
 @dispatch()
-def numberp(x):
+def integerp(x) -> bool:
+    if isinstance(x, bool):
+        return False
+    else:
+        return isinstance(x, int)
+
+@dispatch()
+def numberp(x) -> bool:
     if isinstance(x, bool):
         return False
     else:
         return isinstance(x, (int, float))
 
+def string_literal_p(e) -> bool:
+    if not isinstance(e, str):
+        return False
+    if len(e) <= 0:
+        return False
+    if e.startswith('"') and e.endswith('"'):
+        return True
+    if e.startswith('-'):
+        e = e[1:]
+    if len(e) <= 0:
+        return False
+    return e[0].isdigit()
+
 @dispatch()
-def dictp(x):
+def dictp(x) -> bool:
     return isinstance(x, std.Mapping)
 
 @dispatch()
-def modulep(x):
+def modulep(x) -> bool:
     return isinstance(x, types.ModuleType)
 
 @dispatch()
+def streamp(x) -> bool:
+    return isinstance(x, io.IOBase)
+
+@overload
+def car(x: None): ...
+@overload
+def car(x: HasCar[A, D]) -> A: ...
+@overload
+def car(x: Tuple[A, D]) -> A: ...
+@overload
+def car(x: Tuple[A, ...]) -> Optional[A]: ...
+@overload
+def car(x: Cons[A, D]) -> A: ...
+@overload
+def car(x: ConsList[A]) -> A: ...
+
+@dispatch()
+# def car(x: Optional[Union[HasCar[A, D], Cons[A, D], Tuple[A, ...]]]) -> Optional[A]:
 def car(x):
     return x if null(x) else x.car
 
+@overload
+def cdr(x: None): ...
+@overload
+def cdr(x: HasCdr[A, D]) -> D: ...
+@overload
+def cdr(x: Tuple[A, D]) -> D: ...
+@overload
+def cdr(x: Tuple[A, ...]) -> Optional[Tuple[A, ...]]: ...
+@overload
+def cdr(x: Cons[A, D]) -> D: ...
+# @overload
+# def cdr(x: ConsList[A]) -> ConsList[A]: ...
+# @overload
+# def cdr(x: Cell[D]) -> D: ...
+
 @dispatch()
+# def cdr(x: Union[Cons[A, D], Tuple[A, D], HasCdr[D]]) -> D:
+# def cdr(x: Optional[Union[HasCdr[A, D], Cons[A, D], Tuple[A, D], Tuple[D, ...]]]) -> Optional[D]:
+# def cdr(x: Optional[HasCdr[A, D]]) -> Optional[D]:
 def cdr(x):
     return x if null(x) else x.cdr
 
+def _check():
+    zz = cdr(Cons(1,2))
+    uu = cdr(it := Cons(1,Cons("ok", 99)))
+    it.set_cdr(21)
+    it.set_cdr(nil)
+
 @dispatch()
-def eq(x, y):
+def eq(x, y) -> bool:
     return x is y
 
 @eq.register(str)
 @eq.register(bytes)
 @eq.register(numbers.Number)
-def eqv(x, y):
+def eqv(x, y) -> bool:
     return x == y
 
 
@@ -923,7 +1321,20 @@ def cdr_tuple(x):
     return XCONS(x[1:]) if x and x[1:] else nil
 
 
-nil = None
-t = True
-
 lul_init()
+
+def _check():
+    zz: Cell[Union[str, SupportsHash], int]
+    zz.car
+    zz.cdr
+    qqc = car(zz)
+    qq = cdr(zz)
+    def expect(uu: Cell[int]):
+        ...
+    expect(a1 := Cell(dict(a=("omg", 42)), "a"))
+    expect(a2 := Cell(dict(a=99), "a"))
+    expect(a3 := Cell(dict(a=99), "a", "bad"))
+    expect(a4 := Cell(dict(a=99), "a", 420))
+    expect(a5 := Cell(dict(a=99), ["bad"], 420))
+    expect(a6 := Cell(dict(a=99), object(), 420))
+

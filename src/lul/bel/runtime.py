@@ -7,6 +7,7 @@ from ..common import *
 import dataclasses
 import functools
 import collections.abc as std
+import json
 
 class NSMeta(type):
     def __missing__(self, name):
@@ -23,11 +24,14 @@ class NSMeta(type):
             setattr(self, id, value)
             return value
 
-def table(*args):
-    return dict(zip(args[::2], args[1::2]))
-
 def delay(x):
     return lambda: x
+
+def part(f, *args, **kws):
+    return functools.wraps(f)(lambda *args1, **kws1: f(*args, *args1, **kws, **kws1))
+
+def thunk(f, *args, **kws):
+    return functools.wraps(f)(lambda *_args, **_kws: f(*args, **kws))
 
 def id(x=nil, y=nil):
     if eq(x, y):
@@ -44,7 +48,11 @@ def type(x):
     elif numberp(x):
         return quote("number")
     elif dictp(x):
-        return quote("table")
+        return quote("tab")
+    elif streamp(x):
+        return quote("stream")
+    elif char(x):
+        return quote("char")
     else:
         return quote("symbol")
 
@@ -79,28 +87,110 @@ def nom(x):
         return "o"
     elif x is apply:
         return "apply"
-    else:
+    elif isinstance(x, str):
         return x
+    else:
+        return repr(x)
 
-def quote(x):
+prrepr_[0] = nom
+
+def quote(x: T) -> T:
     return sym(x)
 
-def apply(f, *args, **kws):
+def applyargs(*args):
     xs = args[-1]
     if isinstance(xs, Cons):
         xs = xs.list()
     elif xs is nil:
-        xs  = ()
-    args = tuple(args[0:-1]) + tuple(xs)
-    return call(f, *args, **kws)
+        xs = ()
+    return tuple(args[0:-1]) + tuple(xs)
 
 def call(f, *args, **kws):
     return f(*args, **kws)
 
-# globe = globals
+def kwcall(f, *args, **kws):
+    args, keys = y_unzip(args)
+    return call(f, *args, **kws, **keys)
 
-unset = join("unset")
+def apply(f, *args, **kws):
+    return call(f, *applyargs(*args), **kws)
+
+def kwapply(f, *args, **kws):
+    return kwcall(f, *applyargs(*args), **kws)
+
+# unset = join("%unset")
 o = "o"
 
 def err(x, *args):
     raise Error(x, *args)
+
+def keyword(x):
+    return stringp(x) and len(x) > 1 and x[0] == ":"
+
+def char(x):
+    return stringp(x) and len(x) > 1 and x.startswith("\\")
+
+def keynom(x):
+    assert keyword(x)
+    return x[1:]
+
+def keysym(x):
+    if keyword(x):
+        return x
+    if stringp(x) and not string_literal_p(x):
+        return ":" + x
+    return x
+
+# (defmacro y-%for (h k v &rest body)
+#   (y-let-unique (i)
+#     `(let* ((,i -1))
+#        (while ,h
+#          (let* ((,k (if (keywordp (car ,h)) (y-%key (car ,h)) (setq ,i (1+ ,i))))
+#                 (,v (if (keywordp (car ,h)) (cadr ,h) (car ,h))))
+#            ,@body)
+#          (setq ,h (if (keywordp (car ,h)) (cddr ,h) (cdr ,h))))
+#        nil)))
+def y_for(h):
+    i = -1
+    while not null(h):
+        if yes(keyword(car(h))):
+            k = keynom(car(h))
+            v = car(cdr(h))
+            h = cdr(cdr(h))
+        else:
+            i += 1
+            k = i
+            v = car(h)
+            h = cdr(h)
+        yield k, v
+
+def y_unzip1(h):
+    xs = []
+    kvs = {}
+    i = -1
+    for k, v in y_for(h):
+        # if integerp(k) and k >= 0:
+        #     if len(xs) <= k:
+        #         xs.extend([nil] * ((k + 1) - len(xs)))
+        #     xs[k] = v
+        if integerp(k):
+            i += 1
+            assert k == i
+            assert len(xs) == i
+            xs.append(v)
+        else:
+            kvs[k] = v
+    return xs, kvs
+
+def y_items(h):
+    return py.tuple((k, v) for k, v in y_for(h))
+
+def y_keys(h) -> Dict:
+    return py.dict((k, v) for k, v in y_for(h) if not integerp(k))
+
+def y_vals(h) -> List:
+    return py.list(v for k, v in y_for(h) if integerp(k))
+
+def y_unzip(h) -> Tuple[List, Dict]:
+    return y_vals(h), y_keys(h)
+
