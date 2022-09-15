@@ -1,0 +1,171 @@
+; (do (bel `(do ,@(readallbel ((cdr:get 'read (open "init.bel")))))) nil)
+
+;(do (map bel (readallbel ((cdr:get 'read (open "init.bel"))))) nil)
+
+
+
+
+     ; \bel "\a"
+;(set \0 "0"
+;     \1 "1"
+;     \bel "\u0007"
+;     \tab "\t"
+;     \lf "\n"
+;     \cr "\r"
+;     \sp " ")
+
+;;(set namecs '((bel . \bel) (tab . \tab) (lf . \lf) (cr . \cr) (sp . \sp)))
+;;(set namecs `((bel . ,\bel) (tab . ,\tab) (lf . ,\lf) (cr . ,\cr) (sp . ,\sp)))
+;(set namecs `((,"0" ,@\0) (,"1" ,@\1) (bel ,@\bel) (tab ,@\tab) (lf ,@\lf) (cr ,@\cr) (sp ,@\sp)))
+
+(set vec py!list)
+
+;(def reduce (f xs)
+;  (if (no (cdr xs))
+;      (car xs)
+;      (f (car xs) (reduce f (cdr xs)))))
+
+(mac or args
+  (if (no args)
+      nil
+      (let v (uvar 'or)
+        `(let ,v ,(car args)
+           (if ,v ,v (or ,@(cdr args)))))))
+
+(mac and args
+  (reduce (fn es (cons 'if es))
+          (or args '(t))))
+
+
+(mac with (parms . body)
+  (let ps (hug parms)
+    `((fn ,(map car ps) ,@body)
+      ,@(map cadr ps))))
+
+(mac withs (parms . body)
+  (if (no parms)
+      `(do ,@body)
+      `(let ,(car parms) ,(cadr parms)
+         (withs ,(cddr parms) ,@body))))
+
+(def yc (f)
+  ([_ _] [f (fn a (apply (_ _) a))]))
+
+(mac rfn (name . rest)
+  `(yc (fn (,name) (fn ,@rest))))
+
+(mac afn args
+  `(rfn self ,@args))
+
+(def wait (f)
+  ((afn (v) (if v v (self (f))))
+   (f)))
+
+;(mac iflet (var . args)
+;  (if (no (cdr args))
+;      (car args)
+;      (let v (uvar)
+;        `(let ,v ,(car args)
+;           (if ,v
+;               (let ,var ,v ,(cadr args))
+;               (iflet ,var ,@(cddr args)))))))
+
+(mac iflet (var . args)
+  (if (no (cdr args))
+      (car args)
+      (let v (uvar 'iflet)
+        `(let ,v ,(car args)
+           (%if ,v
+                (let ,var ,v ,(cadr args))
+                (iflet ,var ,@(cddr args)))))))
+
+(mac aif args
+  `(iflet it ,@args))
+
+;(mac awhen (expr . body)
+;  `(let it ,expr (if it (do ,@body))))
+
+(mac awhen (expr . body)
+  `(iflet it (do ,@body)))
+
+;(mac aand args
+;  (if (no args)
+;      't 
+;      (no (cdr args))
+;       (car args)
+;      `(let it ,(car args) (and it (aand ,@(cdr args))))))
+
+(mac aand args
+  (if (no args)
+      't 
+      (no (cdr args))
+       (car args)
+      `(aif ,(car args) (aand ,@(cdr args)))))
+
+
+;(def prn args
+;  (apply print args)
+;  (last args))
+
+
+;(def compose fs
+;  (reduce (fn (f g)
+;            (fn args (f (apply g args))))
+;          (or fs (list idfn))))
+
+(mac zap (op place . args)
+  (letu (vo vc vl va)
+    `(atomic (with (,vo       ,op
+                    (,vc ,vl) (where ,place)
+                    ,va       (list ,@args))
+               (case ,vl
+                 a (xar ,vc (apply ,vo (car ,vc) ,va))
+                 d (xdr ,vc (apply ,vo (cdr ,vc) ,va))
+                   (err 'bad-place))))))
+
+(def length (l)
+  (%if l (len l)))
+
+(mac ++ (place (o n 1))
+  `(zap + ,place ,n))
+
+(mac -- (place (o n 1))
+  `(zap - ,place ,n))
+
+(mac push (x place)
+  (letu v
+    `(let ,v ,x
+       (zap [cons ,v _] ,place))))
+
+(mac pull (x place . rest)
+  (letu (v n l)
+    `(with (,v ,x
+            ,n (length ,place)
+            ,l (zap [rem ,v _ ,@rest] ,place))
+       (unless (= ,n (length ,l))
+         ,v))))
+
+(mac wipe args
+  `(set ,@(fuse [list _ nil] args)))
+
+(mac pop (place)
+  `(let (cell loc) (where ,place)
+     (let xs ((case loc a car d cdr) cell)
+       ((case loc a xar d xdr) cell (cdr xs))
+       (car xs))))
+
+(mac do1 (x . rest)
+  (let v (uvar 'do1)
+    `(let ,x ,v ,@rest ,x)))
+
+(mac alet rest
+  `(let it ,@(or rest '(nil)) it))
+
+(def adjoin (x ys (o f =))
+  (if (mem x ys f) ys (cons x ys)))
+
+(mac pushnew (x place (o f '=))
+  (letu v
+    `(let ,v ,x
+       (zap [adjoin ,v _ ,f] ,place))))
+

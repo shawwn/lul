@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from typing import *
 
 from ..common import *
@@ -49,6 +50,8 @@ def type(x):
         return quote("number")
     elif dictp(x):
         return quote("tab")
+    elif modulep(x):
+        return quote("mod")
     elif streamp(x):
         return quote("stream")
     elif char(x):
@@ -73,8 +76,8 @@ def sym(x):
         return nil
     elif x == "o":
         return o
-    elif x == "apply":
-        return apply
+    # elif x == "apply":
+    #     return apply
     else:
         return x
 
@@ -85,10 +88,12 @@ def nom(x):
         return "nil"
     elif x is o:
         return "o"
-    elif x is apply:
-        return "apply"
+    # elif x is apply:
+    #     return "apply"
     elif isinstance(x, str):
         return x
+    elif inspect.isfunction(x):
+        return f"#'{nameof(x)}"
     else:
         return repr(x)
 
@@ -97,12 +102,60 @@ prrepr_[0] = nom
 def quote(x: T) -> T:
     return sym(x)
 
-def applyargs(*args):
-    xs = args[-1]
+@dispatch()
+def update(out: MutableMapping, *args: Mapping, **kws):
+    for x in args:
+        if modulep(x):
+            x = x.__dict__
+        out.update(x)
+    out.update(kws)
+    return out
+
+@update.register(types.ModuleType)
+def update_module(out: types.ModuleType, *args, **kws):
+    return update(out.__dict__, *args, **kws)
+
+@update.register(py.type(None))
+def update_module(out: None, *args, **kws):
+    return update({}, *args, **kws)
+
+def stash(args=nil, kwargs: Dict[str] = nil):
+    # kwargs = kwargs or {}
+    # args, kws = y_unzip(args)
+    kws = kwargs or {}
+    if kws:
+        return XCONS([quote("lit"), quote("stash"), XCONS(args), kws])
+    else:
+        return XCONS(args)
+
+def stashp(args):
+    if eq(car(args), quote("lit")):
+        if eq(car(cdr(args)), quote("stash")):
+            return t
+
+def unstash(*args) -> Tuple[Cons, Dict[str]]:
+    xs = []
+    kws = {}
+    for arg in args:
+        if stashp(arg):
+            it = cdr(cdr(arg))
+            xs1, ks1 = car(it), car(cdr(it))
+            xs.extend(Cons.list(xs1))
+            kws.update(py.dict(ks1))
+        else:
+            xs.extend(Cons.list(arg))
+    # return args, {}
+    return XCONS(xs), kws
+
+def cons2vec(xs):
     if isinstance(xs, Cons):
-        xs = xs.list()
-    elif xs is nil:
-        xs = ()
+        return xs.list()
+    elif null(xs):
+        return []
+    return py.list(xs)
+
+def applyargs(*args):
+    xs = cons2vec(args[-1])
     return tuple(args[0:-1]) + tuple(xs)
 
 def call(f, *args, **kws):
@@ -115,8 +168,8 @@ def kwcall(f, *args, **kws):
 def apply(f, *args, **kws):
     return call(f, *applyargs(*args), **kws)
 
-def kwapply(f, *args, **kws):
-    return kwcall(f, *applyargs(*args), **kws)
+def kwapply(f, args=None, kws: Dict[str] = None):
+    return call(f, *applyargs(args or []), **(kws or {}))
 
 # unset = join("%unset")
 o = "o"
@@ -191,6 +244,15 @@ def y_keys(h) -> Dict:
 def y_vals(h) -> List:
     return py.list(v for k, v in y_for(h) if integerp(k))
 
-def y_unzip(h) -> Tuple[List, Dict]:
+def y_unzip(h) -> Tuple[List, Dict[str]]:
     return y_vals(h), y_keys(h)
 
+def y_zip(args, kws) -> List:
+    xs = cons2vec(args)
+    for k, v in kws.items():
+        xs.extend([keysym(k), v])
+    return xs
+
+@nameof.register(Cons)
+def nameof_cons(x):
+    return repr(x)

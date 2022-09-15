@@ -97,6 +97,12 @@ def indentation() -> str:
 def with_indent(n=2):
     return CV_let(indent_level, indent_level.get() + n)
 
+def repr_get(kvs, k, *default):
+    if isinstance(kvs, std.Mapping):
+        return kvs.get(k, *default)
+    else:
+        return getattr(kvs, k, *default)
+
 def repr_fields(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]]):
     xs = []
     with with_indent():
@@ -104,14 +110,25 @@ def repr_fields(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]]):
         for kv in kvs:
             k, v = kv
             if v is None:
-                v = lambda k, self: (repr(it) if (it := getattr(self, k, None)) is not None else None)
+                v = lambda k, self: (prrepr(it) if (it := repr_get(self, k, None)) is not None else None)
             x = v(k, self)
             if x is not None:
                 xs.append(f"\n{ind}{k}={x}")
     return ",".join(xs)
 
-def repr_self(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]]):
-    return py.type(self).__name__ + "(" + repr_fields(self, *kvs) + ")"
+def repr_self(self: T, *kvs: Tuple[str, Optional[Callable[[str, T], str]]], name=unset):
+    if name is unset:
+        name = nameof(py.type(self))
+    return name + "(" + repr_fields(self, *kvs) + ")"
+
+def repr_call(f, **args):
+    return repr_self(args, *((k, None) for k in args.keys()), name=nameof(f))
+
+@functools.singledispatch
+def nameof(x, unknown="<unknown>"):
+    if isinstance(x, str):
+        return x
+    return getattr(x, "__qualname__", getattr(x, "__name__", unknown)).replace(".<locals>", "").replace(".<lambda>", ".<fn>")
 
 def stringp(x):
     return isinstance(x, str)
@@ -457,15 +474,15 @@ def truthy(x):
         return x
     elif isinstance(x, numbers.Number):
         return True
+    elif isinstance(x, std.Sized):
+        return True
     else:
         return bool(x)
 
-@functools.singledispatch
 def falsep(x):
-    # return x is False
     return not truthy(x)
 
-def is_p(x):
+def ok(x):
     return not null(x)
 
 def no(x):
@@ -743,8 +760,13 @@ prrepr_ = [lambda x: x if py.isinstance(x, str) else repr(x)]
 def prrepr(x):
     return prrepr_[0](x)
 
+def inner(s):
+    if isinstance(s, std.Sized) and len(s) >= 2:
+        return s[1:-1]
+    return s
+
 def prcons(self):
-    if consp(self.cdr):
+    if consp(cdr(self)):
         if car(self) == "quote":
             return "'" + prrepr(car(cdr(self)))
         if car(self) == "unquote":
@@ -753,6 +775,8 @@ def prcons(self):
             return ",@" + prrepr(car(cdr(self)))
         if car(self) == "quasiquote":
             return "`" + prrepr(car(cdr(self)))
+        if car(self) == "fn" and prrepr(car(cdr(self))) == "(_)" and null(cdr(cdr(cdr(self)))):
+            return "[" + inner(prrepr(car(cdr(cdr(self))))) + "]"
     s = []
     for tail in self:
         try:
@@ -924,9 +948,9 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
 
 
     @classmethod
-    def new(cls: Type[T], src: Cons[A, D]) -> T:
+    def new(cls: Type[T], src: Cons[A, D], **kws) -> T:
         # return cls(src.car_, src.cdr_, src.set_car, src.set_cdr, src.get_car, src.get_cdr)
-        return cls(src.car_, src.cdr_, frozen=src.frozen_)
+        return cls(src.car_, src.cdr_, frozen=src.frozen_, **kws)
 
     # @property
     # def car(self) -> A:
@@ -1172,6 +1196,10 @@ def XCONS_tuple(x): #, set_car=None, set_cdr=None):
         return out
     else:
         return nil
+
+@XCONS.register(type(None))
+def XCONS_nil(x):
+    return nil
 
 def _check():
     XCONS_tuple((1,"foo"))
