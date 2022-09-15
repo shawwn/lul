@@ -119,9 +119,9 @@ def read(s, eof=None, start=None):
         form = read_list(s, "[", "]", start=start)
         if stream_mode(s) in ["bel", "arc"]:
             return ["fn", ["_"], form]
-        return ["lit", "brackets", form]
+        return ["%brackets", form]
     elif c == "{" and stream_mode(s) != "elisp":
-        return ["lit", "braces", read_list(s, "{", "}", start=start)]
+        return ["%braces", read_list(s, "{", "}", start=start)]
     elif c == "\"":
         return read_string(s, "\"", "\"", True)
     # elif c == "|":

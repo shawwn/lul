@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import reprlib
 import weakref
 
 from .runtime import *
@@ -260,21 +261,21 @@ def fn(parms, *body):
 #                     list(quote("quote"), list(quote("do"), *body)))
 
 # (set vmark (join))
-vmark = join("%vmark")
+vmark = globals().get("vmark", join("%vmark"))
 
-uvars = weakref.WeakKeyDictionary()
-ucount = [0]
+# uvars = globals().get("uvars", weakref.WeakKeyDictionary())
+ucount = globals().get("ucount", [0])
 
 class UVar(Cons):
     def __init__(self, *args, **kws):
         super().__init__(*args, **kws)
         ucount[0] += 1
-        uvars[self] = ucount[0]
+        self.n = ucount[0]
     @property
     def name(self):
         return cadr(self) or "uvar"
     def __repr__(self):
-        return f"#{self.name}{uvars.get(self, '')}"
+        return f"#{self.name}{self.n}"
 
 # (def uvar ()
 #   (list vmark))
@@ -520,10 +521,26 @@ def case_f(expr, *args) -> Callable[[], Any]:
 #            (if ,v
 #                (let ,var ,v ,(cadr args))
 #                (iflet ,var ,@(cddr args)))))))
-#
+@macro_
+def iflet(var, *args):
+    """
+    (if (no (cdr args))
+        (car args)
+        (let v (uvar)
+          `(let ,v ,(car args)
+             (if ,v
+                 (let ,var ,v ,(cadr args))
+                 (iflet ,var ,@(cddr args))))))
+    """
+    return ["iflet", "it", *args]
+
 # (mac aif args
 #   `(iflet it ,@args))
-#
+@macro_
+def aif(*args):
+    return ["iflet", "it", *args]
+
+
 # (def find (f xs)
 #   (aif (some f xs) (car it)))
 def find(f, xs):
@@ -1004,10 +1021,14 @@ class BelExpression(Cons):
     @property
     def a(self) -> TA:
         return cadr(self)
+    @reprlib.recursive_repr()
     def __repr__(self):
         # return f"BelExpression(e={self.e!r})"
         # return repr_self(self, ("e", None), ("a", None))
-        return repr_self(self, ("e", None))
+        # return repr_self(self, ("e", None))
+        with with_indent(2):
+            return "\n" + indentation() + prrepr(self.e)
+
 
 TBelThreads: TypeAlias = "Union[List2[ConsList[TBelThread], TG], BelThreads]"
 
@@ -1291,7 +1312,7 @@ def xset(k, v, kvs):
         return err(quote("cannot-set"), k)
 
 # (set smark (join))
-smark = join("%smark")
+smark = globals().get("smark", join("%smark"))
 
 # (def inwhere (s)
 #   (let e (car (car s))
@@ -1518,9 +1539,51 @@ def if_(es, a, s, r, m, test=unset, form=unset):
                    r,
                    m)
 
-def prn(*args, **kws):
-    print(*args, **kws)
+import ansi_styles
+fgcol = ansi_styles.ansiStyles.color.ansi16m
+fgclo = ansi_styles.ansiStyles.color.close
+bgcol = ansi_styles.ansiStyles.bgColor.ansi16m
+bgclo = ansi_styles.ansiStyles.bgColor.close
+
+def color(r: int, g: int, b: int):
+    return r, g, b
+
+def gray(v: int):
+    return color(v, v, v)
+
+sand = color(246, 246, 239)
+site_color = color(180, 180, 180)
+border_color = color(180, 180, 180)
+textgray = gray(130)
+noob_color = color(60, 150, 60)
+linkblue = color(0, 0, 190)
+orange   = color(255, 102, 0)
+darkred  = color(180, 0, 0)
+darkblue = color(0, 0, 120)
+
+def prs(*args,
+        fg: Optional[Tuple[int, int, int]] = None,
+        bg: Optional[Tuple[int, int, int]] = None,
+        sep = " ",
+        end = "\n",
+        flush = False,
+        **kws):
+    if ok(fg) and fg is not True: print(end=fgcol(*cons2vec(fg)))
+    if ok(bg) and bg is not True: print(end=bgcol(*cons2vec(bg)))
+    if ok(fg): end = fgclo + end
+    if ok(bg): end = bgclo + end
+    print(*(arg for arg in args if ok(arg)), sep=sep, end=end, flush=flush, **kws)
     return last(args)
+
+prn = part(prs, sep="")
+pr = part(prn, end="", flush=True)
+
+@macro_
+def fontcolor(color, *body):
+    return ["do",
+            ["pr", ["apply", "fgcol", color]],
+            ["after", ["do", *body],
+             ["pr", "fgclo"]]]
 
 def prcall(f, *args, **kws):
     if ok(f):
@@ -2161,7 +2224,7 @@ def applyclo(parms, args, kws, env, body, s, r, m):
 #                        (destructure pat arg env s r m))))
 def pass_(pat, arg, kws, env, s, r, m):
     # prn("pass", pat, arg)
-    with prcall("pass_", pat=pat, arg=arg, kws=kws):
+    with prcall("pass_" and nil, pat=pat, arg=arg, kws=kws):
         pat = evsyntax(pat)
         def ret(_):
             return mev(s, cons(_, r), m)
@@ -2223,7 +2286,7 @@ def typecheck(var_f, arg, kws, env, s, r, m):
 #                       r
 #                       m)))
 def destructure(p_ps, arg, kws, env, s, r, m):
-    with prcall("destructure", p_ps=p_ps, arg=arg, kws=kws, env=env):
+    with prcall("destructure" and nil, p_ps=p_ps, arg=arg, kws=kws, env=env):
         fut = fu(env, doc=lambda: list(":p_ps", p_ps, ":arg", arg, ":kws", kws, ":env", env))
         # fut = fu(env, doc=lambda: repr_call("", p_ps=p_ps, arg=arg, kws=kws, env=env))
         p, ps = car(p_ps), cdr(p_ps)
@@ -3063,6 +3126,8 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
 def dbg():
     import pdb
     pdb.pm()
+
+
 
 
 

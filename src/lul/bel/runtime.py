@@ -29,7 +29,7 @@ def delay(x):
     return lambda: x
 
 def part(f, *args, **kws):
-    return functools.wraps(f)(lambda *args1, **kws1: f(*args, *args1, **kws, **kws1))
+    return functools.wraps(f)(lambda *args1, **kws1: f(*args, *args1, **{**kws, **kws1}))
 
 def thunk(f, *args, **kws):
     return functools.wraps(f)(lambda *_args, **_kws: f(*args, **kws))
@@ -91,7 +91,7 @@ def nom(x):
     # elif x is apply:
     #     return "apply"
     elif isinstance(x, str):
-        return x
+        return x if x.isprintable() and ' ' not in x else json.dumps(x)
     elif inspect.isfunction(x):
         return f"#'{nameof(x)}"
     else:

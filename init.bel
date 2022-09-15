@@ -20,6 +20,9 @@
 
 (set vec py!list)
 
+(def in (x . ys)
+  (mem x ys))
+
 ;(def reduce (f xs)
 ;  (if (no (cdr xs))
 ;      (car xs)
@@ -73,6 +76,11 @@
 (mac iflet (var . args)
   (if (no (cdr args))
       (car args)
+      (atom var)
+      `(let ,var ,(car args)
+         (%if ,var
+              ,(cadr args)
+              (iflet ,var ,@(cddr args))))
       (let v (uvar 'iflet)
         `(let ,v ,(car args)
            (%if ,v
@@ -81,6 +89,11 @@
 
 (mac aif args
   `(iflet it ,@args))
+
+
+(def wait (f)
+  ((afn (v) (if v v (self (f))))
+   (f)))
 
 ;(mac awhen (expr . body)
 ;  `(let it ,expr (if it (do ,@body))))
@@ -169,3 +182,163 @@
     `(let ,v ,x
        (zap [adjoin ,v _ ,f] ,place))))
 
+
+
+;((lit clo ((#eif_v1 %eif)) (#eif_w2) (if (caris #eif_w2 #eif_v1 id) (let v (cdr #eif_w2) 1) (let v #eif_w2 2)))
+; (ccc (fn (#eif_c3) (dyn err [#eif_c3 (cons #eif_v1 _)] (let x 42 (print:current))))))>)) nil) (#eif_v1 %eif)) (_) (#eif_c3 (cons #eif_v1 _)))))
+
+;(define expand-local ((x name value))
+;  (setenv name :variable)
+;  `(%local ,name ,(macroexpand value)))
+
+;(define expand-function ((x args rest: body))
+;  (with-bindings (args)
+;    `(%function ,args ,@(macroexpand body))))
+
+;(define expand-definition ((x name args rest: body))
+;  (with-bindings (args)
+;    `(,x ,name ,args ,@(macroexpand body))))
+
+;(define expand-macro (form)
+;  (macroexpand (expand1 form)))
+
+;(define-global expand1 ((name rest: body))
+;  (apply (macro-function name) body))
+
+;(define-global macroexpand (form)
+;  (if (symbol? form)
+;      (macroexpand (symbol-expansion form))
+;      (atom? form) form
+;    (let x (hd form)
+;      (if (= x '%local) (expand-local form)
+;          (= x '%function) (expand-function form)
+;          (= x '%global-function) (expand-definition form)
+;          (= x '%local-function) (expand-definition form)
+;          (macro? x) (expand-macro form)
+;        (map macroexpand form)))))
+
+
+;(define (imap f l)
+;  (cond ((pair? l)
+;         (cons (f (car l)) (imap f (cdr l))))
+;        ((null? l)
+;         '())
+;        (#t (f l))))
+
+
+(def imap (f l)
+  (if (consp l)
+      (cons (f (car l)) (imap f (cdr l)))
+      (no l)
+      l
+    (f l)))
+
+;(mac value (x)
+;  `(aand (safe (where ,x))
+;         (let (cell loc) it
+;           ((case loc a car d cdr) cell))))
+
+(set macenv* nil)
+(set enviro* nil)
+
+(def setenv (name value)
+  (set macenv* (put name value macenv*)))
+
+(def getenv (name)
+  (get name (or enviro* (append macenv* globe))))
+
+(def getval (name)
+  (cdr (getenv name)))
+
+(def macro? (x)
+  (isa!mac (getval x)))
+
+(def macro-form? (x)
+  (and (consp x) (macro? (car x))))
+
+(def macro-function (name)
+  (caddr (getval name)))
+
+(mac define-macro (name args . body)
+  `(setenv ',name (macro ,args ,@body)))
+
+; (def expand-local ((x name value . body))
+;   `(%local ,name ,(macroexpand value)
+;      ,@(imap macroexpand body)))
+
+(define-macro %local (name value . body)
+  `(%expansion
+     (%local ,name ,(macroexpand value)
+       ,@(imap macroexpand body))))
+
+; (def expand-function ((x args . body))
+;   (with-bindings args
+;     `(%function ,args ,@(imap macroexpand body))))
+
+(mac with-bindings (args . body)
+  `(do ,@body))
+
+(define-macro %function (args . body)
+  (with-bindings args
+    `(%expansion
+       (%function ,args ,@(imap macroexpand body)))))
+
+; (define-macro %ccc (args . body)
+;   (with-bindings args
+;     `(%expansion
+;        (%ccc ,args ,@(imap macroexpand body)))))
+
+(def expand-macro (form)
+  (macroexpand (expand1 form)))
+
+(def expand1 ((name . body))
+  (apply (macro-function name) body))
+
+(def macroexpand (form)
+  (if (no (consp form)) form
+    (let x (car form)
+      (if (= x '%expansion) (cadr form)
+          (in x vmark smark) form
+          (macro? x) (expand-macro form)
+        (imap macroexpand form)))))
+
+(def expand (form)
+  (macroexpand form))
+
+(define-macro fn rest
+  `(%function ,@rest))
+
+(define-macro let rest
+  `(%local ,@rest))
+
+; (define-macro ccc rest
+;   `(%ccc ,@rest))
+
+(def macex1 (e)
+  (if (macro-form? e)
+      (expand1 e)
+      e))
+
+;(def macroexpand (e)
+;  (if (no (consp e)) e
+;      (macro? (car e)) (expand-macro e)
+;      e))
+
+(mac %local (name value . body)
+  `(let ,name ,value ,@body))
+
+(mac %function (args . body)
+  `(fn ,args ,@body))
+
+
+; (def _check ()
+;   (%local #eif_v (join '%eif)
+;     (%local #eif_w (ccc (%function (#eif_c) (dyn err (%function (_) (((%vmark) eif_c) (cons ((%vmark) eif_v) _))) 1)))
+;       (if (caris ((%vmark) eif_w) ((%vmark) eif_v) id) (%local v (cdr ((%vmark) eif_w)) (list 'ok v)) (%local v ((%vmark) eif_w) (list 'fail v))))))
+
+(def _check ()
+  (%local #eif_v (join '%eif)
+    (%local #eif_w (ccc (%function (#eif_c) (dyn err (%function (_) (#eif_c (cons #eif_v _))) 1)))
+      (if (caris #eif_w #eif_v id)
+          (%local v (cdr #eif_w) (list 'ok v))
+          (%local v #eif_w (list 'fail v))))))
