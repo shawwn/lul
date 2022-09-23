@@ -1680,6 +1680,7 @@ class BelConsole(code.InteractiveConsole):
 
         """
         # reload(M)
+        # noinspection PyBroadException
         try:
             self.exec(code, self.locals)
         except SystemExit:
