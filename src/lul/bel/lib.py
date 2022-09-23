@@ -392,6 +392,7 @@ def caris(x, y, f=unset):
 #       (no (cdr xs)) (list (f (car xs)))
 #                     (cons (f (car xs) (cadr xs))
 #                           (hug (cddr xs) f))))
+@dispatch()
 def hug(xs, f=unset):
     if f is unset:
         f = list
@@ -402,6 +403,12 @@ def hug(xs, f=unset):
     else:
         return cons(f(car(xs), cadr(xs)),
                     hug(cddr(xs), f))
+
+@hug.register(std.Mapping)
+def hug_Mapping(xs: Mapping, f=unset):
+    if f is unset:
+        f = list
+    return py.tuple(f(k, v) for k, v in xs.items())
 
 # (mac with (parms . body)
 #   (let ps (hug parms)
