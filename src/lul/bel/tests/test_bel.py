@@ -12,6 +12,23 @@ class BelTestCase(unittest.TestCase):
         form, pos = bel.reader.read_from_string(string, mode="bel", more=more)
         return form
 
+    def test_list(self):
+        list = bel.list
+        test_eq = self.assertEqual
+        test_not = self.assertNotEqual
+        test_is = self.assertIs
+        test_lt = self.assertLess
+        test_gt = self.assertGreater
+        test_eq(list(1, 2, 3), list(1, 2, 3))
+        test_not(list(1, 2, 4), list(1, 2, 3))
+        mark = list("%mark")
+        test_is(mark, mark)
+        test_eq(42, {mark: 42}.get(mark))
+        test_lt(list(1, 2), list(2, 2))
+        test_lt(list(2, 1), list(2, 2))
+        test_gt(list(2, 2), list(1, 2))
+        test_gt(list(2, 2), list(2, 1))
+
     def test_reader(self):
         read = self.read
         test = self.assertEqual

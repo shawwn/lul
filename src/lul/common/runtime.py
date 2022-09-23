@@ -695,6 +695,7 @@ def prcons(self):
             s += [".", prrepr(cdr(tail))]
     return '(' + ' '.join(s) + ')'
 
+@functools.total_ordering
 class Cons:
     def __init__(self, car=None, cdr=None, set_car=None, set_cdr=None, get_car=None, get_cdr=None):
         self.car_ = car
@@ -767,6 +768,21 @@ class Cons:
             n += 1
         return n
 
+    def __eq__(self, other):
+        if not isinstance(other, Cons):
+            return False
+        return car(self) == car(other) and cdr(self) == cdr(other)
+
+    def __lt__(self, other):
+        if not isinstance(other, Cons):
+            return False
+        if car(self) == car(other):
+            return cdr(self) < cdr(other)
+        return car(self) < car(other)
+
+    def __hash__(self):
+        return py.hash(py.id(self))
+
 class Cell(Cons):
     def __init__(self, kvs, k, *default, get_car=None, set_car=None, get_cdr=None, set_cdr=None):
         if get_cdr is None:
@@ -791,6 +807,10 @@ class Cell(Cons):
 @dispatch()
 def XCONS(x):
     assert isinstance(x, Cons)
+    return x
+
+@XCONS.register(type(None))
+def XCONS_nil(x):
     return x
 
 @XCONS.register(tuple)
