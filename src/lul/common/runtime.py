@@ -674,7 +674,7 @@ def prrepr(x):
     return x if py.isinstance(x, str) else repr(x)
 
 def prcons(self):
-    if consp(self.cdr):
+    if consp(cdr(self)):
         if car(self) == "quote":
             return "'" + prrepr(car(cdr(self)))
         if car(self) == "unquote":
@@ -797,11 +797,9 @@ def XCONS(x):
 def XCONS_tuple(x, set_car=None, set_cdr=None):
     if x:
         # return Cons(x[0], XCONS(x[1:]))
-        xs = tuple(reversed(x))
         out = nil
-        while xs:
-            out = Cons(xs[0], out, set_car, set_cdr)
-            xs = xs[1:]
+        for v in reversed(x):
+            out = Cons(v, out, set_car, set_cdr)
         return out
     else:
         return nil
@@ -819,7 +817,7 @@ def XCONS_tuple(x, set_car=None, set_cdr=None):
 #     return XCONS_tuple(tuple(Cons(k, v, set_car, make_set_cdr(k)) for k, v in x.items()), set_car, set_car)
 
 @XCONS.register(std.Mapping)
-def XCONS_dict(kvs: dict):
+def XCONS_Mapping(kvs: dict):
     def set_car(v):
         raise Error("Can't set frozen car")
     def set_cdr(v):
@@ -874,7 +872,7 @@ def consp_tuple(x):
 
 @null.register(tuple)
 def null_tuple(x):
-    return len(x) <= 0
+    return not bool(x)
 
 @car.register(tuple)
 def car_tuple(x):
@@ -882,7 +880,7 @@ def car_tuple(x):
 
 @cdr.register(tuple)
 def cdr_tuple(x):
-    return XCONS(x[1:]) if x and x[1:] else nil
+    return XCONS(x[1:])
 
 
 nil = None
