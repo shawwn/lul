@@ -93,9 +93,50 @@ class BelTestCase(unittest.TestCase):
         #       (test= "Expected ) at 5" (get e 'message)))
         test(more, read("(;foo", more))
 
-    def test_simple_run(self):
+    def test_null(self):
+        test = self.assertIs
+        # (define-test nil?
+        #   (test= true (nil? nil))
+        test(True, bel.null(bel.nil))
+        #   (test= true (nil? null))
+        #   (test= false (nil? true))
+        test(False, bel.null(True))
+        #   (test= false (nil? false))
+        test(False, bel.null(False))
+        #   (test= false (nil? (obj))))
+        test(False, bel.null(object()))
+        test(False, bel.null(0))
+
+    def test_ok(self):
+        test = self.assertIs
+        # (define-test is?
+        #   (test= false (is? nil))
+        test(False, bel.ok(bel.nil))
+        #   (test= false (is? null))
+        #   (test= true (is? true))
+        test(True, bel.ok(True))
+        #   (test= true (is? false))
+        test(True, bel.ok(False))
+        #   (test= true (is? (obj))))
+        test(True, bel.ok(object()))
+
+    def test_no(self):
+        test = self.assertIs
+        # (define-test no
+        #   (test= true (no nil))
+        test(True, bel.no(bel.nil))
+        #   (test= true (no null))
+        #   (test= false (no true))
+        test(False, bel.no(True))
+        #   (test= true (no false))
+        test(True, bel.no(False))
+        #   (test= false (no (obj)))
+        test(False, bel.no(object()))
+        #   (test= false (no 0)))
+        test(False, bel.no(0))
+
+    def test_bel(self):
         self.assertEqual(1, 1)
-        self.assertEqual(1, bel.bel("1"))
         self.assertEqual(1, bel.bel("1"))
 
 def test_suite():

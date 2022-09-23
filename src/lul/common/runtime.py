@@ -379,19 +379,21 @@ def null(x):
 
 @functools.singledispatch
 def truthy(x):
-    if isinstance(x, bool):
-        return x
-    elif isinstance(x, numbers.Number):
-        return True
-    else:
-        return bool(x)
+    return bool(x)
 
-@functools.singledispatch
+@truthy.register(bool)
+def truthy_bool(x):
+    return x
+
+@truthy.register(numbers.Number)
+def truthy_Number(_x):
+    return True
+
 def falsep(x):
     # return x is False
     return not truthy(x)
 
-def is_p(x):
+def ok(x):
     return not null(x)
 
 def no(x):
