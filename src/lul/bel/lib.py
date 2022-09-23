@@ -419,6 +419,7 @@ def hug_Mapping(xs: Mapping, f=unset):
 #   (if (no xs)      nil
 #       (f (car xs)) (cons (car xs) (keep f (cdr xs)))
 #                    (keep f (cdr xs))))
+@dispatch(1)
 def keep(f, xs):
     if no(xs):
         return nil
@@ -426,6 +427,10 @@ def keep(f, xs):
         return cons(car(xs), keep(f, cdr(xs)))
     else:
         return keep(f, cdr(xs))
+
+@keep.register(std.Mapping)
+def keep_Mapping(f, xs: Mapping):
+    return {k: v for k, v in xs.items() if yes(f(Cell(xs, k)))}
 
 # (def rem (x ys (o f =))
 #   (keep [no (f _ x)] ys))
