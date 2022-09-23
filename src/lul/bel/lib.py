@@ -5,7 +5,9 @@ import contextlib
 from .runtime import *
 import json
 
+# noinspection PyCompatibility
 import __main__ as G
+
 
 # def no(x):
 #     return id(x, nil) or falsep(x)
