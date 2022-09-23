@@ -441,6 +441,7 @@ def rem(x, ys, f=unset):
 
 # (def get (k kvs (o f =))
 #   (find [f (car _) k] kvs))
+@dispatch(1)
 def get(k, kvs, f=unset):
     if f is unset:
         f = equal
@@ -465,15 +466,32 @@ def get(k, kvs, f=unset):
         return nil
     return out
 
+@get.register(std.Mapping)
+def get_Mapping(k, kvs: Mapping, f=unset):
+    if f in [unset, id]:
+        if k in kvs:
+            return Cell(kvs, k)
+    else:
+        return get(k, XCONS(kvs), f)
 
 # (def put (k v kvs (o f =))
 #   (cons (cons k v)
 #         (rem k kvs (fn (x y) (f (car x) y)))))
+@dispatch(2)
 def put(k, v, kvs, f=unset):
     if f is unset:
         f = equal
     return cons(cons(k, v),
                 rem(k, kvs, lambda x, y: f(car(x), y)))
+
+@put.register(std.Mapping)
+def put_Mapping(k, v, kvs: Mapping, f=unset):
+    if f is unset:
+        return {**kvs, **{k: v}}
+    it = put(k, v, XCONS(kvs), f)
+    if null(it):
+        return {}
+    return {car(x): cdr(x) for x in it.list()}
 
 # (def rev (xs)
 #   (if (no xs)
