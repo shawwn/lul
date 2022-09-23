@@ -651,7 +651,7 @@ def dispatch(arg=0, *, after=None, around=None):
         func = functools.singledispatch(f)
         @functools.wraps(func)
         def wrapper(*args, **kws):
-            if not null(around):
+            if around:
                 result = around(func, *args, **kws)
             else:
                 # result = func(*args, **kws)
