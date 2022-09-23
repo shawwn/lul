@@ -83,7 +83,8 @@ def snoc(*args):
 # (def list args
 #   (append args nil))
 def list(*args):
-    return append(args, nil)
+    # return append(args, nil)
+    return XCONS(args)
 
 # (def map (f . ls)
 #   (if (no ls)       nil
