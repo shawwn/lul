@@ -1026,8 +1026,8 @@ def evcall2(es, a, s, op_r, m):
     else:
         @fu
         def f(s, r, m):
-            _ = snap(es, r)
-            args, r2 = car(_), cadr(_)
+            args_r2 = snap(es, r)
+            args, r2 = car(args_r2), cadr(args_r2)
             return applyf(op, rev(args), a, s, r2, m)
         return mev(append(map(lambda _: list(_, a), es),
                           cons(f,
