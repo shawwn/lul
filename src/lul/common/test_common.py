@@ -5,16 +5,16 @@ from .. import common as lib
 class CommonTest(unittest.TestCase):
     def assertCompiled(self, name: str, result: str, msg=None):
         id = lib.compile_id(name)
-        self.assertEquals(id, result, msg)
+        self.assertEqual(id, result, msg)
         name2 = lib.uncompile_id(id)
-        self.assertEquals(name, name2, msg="Roundtrip failed")
+        self.assertEqual(name, name2, msg="Roundtrip failed")
 
     def assertUncompiled(self, id: str, result: str, msg=None):
-        self.assertEquals(lib.uncompile_id(id), result, msg)
+        self.assertEqual(lib.uncompile_id(id), result, msg)
 
     def check(self, x: str):
         y = lib.uncompile_id(lib.compile_id(x))
-        self.assertEquals(x, y, f"Roundtrip failed for {x!r}. Compiled: {lib.compile_id(x)!r}")
+        self.assertEqual(x, y, f"Roundtrip failed for {x!r}. Compiled: {lib.compile_id(x)!r}")
 
     def test_common(self):
         augassign = [
