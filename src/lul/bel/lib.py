@@ -598,7 +598,7 @@ def fn(parms, *body):
 #       (caris e 'lit)
 #       (string e)))
 def literal(e):
-    if in_(e, t, nil, o, apply):
+    if in_(e, t, nil, o, apply, unset):
         return t
     elif in_(type(e), quote("char"), quote("stream")):
         return t

@@ -62,6 +62,8 @@ def sym(x):
         return o
     elif x == "apply":
         return apply
+    elif x == "unset":
+        return unset
     else:
         return x
 
@@ -74,6 +76,8 @@ def nom(x):
         return "o"
     elif x is apply:
         return "apply"
+    elif x is unset:
+        return "unset"
     else:
         return x
 
