@@ -279,10 +279,21 @@ def string(x):
 
 # (def mem (x ys (o f =))
 #   (some [f _ x] ys))
+@dispatch(1)
 def mem(x, ys, f=unset):
     if f is unset:
         f = equal
     return some(lambda _: f(_, x), ys)
+
+@mem.register(std.Mapping)
+def mem_Mapping(x, ys: Mapping, f=unset):
+    if f in [unset, id]:
+        if x in ys:
+            return Cell(ys, x)
+    for k, v in ys.items():
+        if yes(f(it := Cell(ys, k), x)):
+            return it
+    return nil
 
 # (def in (x . ys)
 #   (mem x ys))
