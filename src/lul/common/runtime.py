@@ -646,7 +646,7 @@ def values(x):
 # run_hook_with_args(print, "ok", 2, 3, file=io.StringIO, omgz=42)
 # run_hook_with_args([print], file=42)
 
-def dispatch(after=None, around=None):
+def dispatch(arg=0, *, after=None, around=None):
     def inner(f):
         func = functools.singledispatch(f)
         @functools.wraps(func)
@@ -654,7 +654,11 @@ def dispatch(after=None, around=None):
             if not null(around):
                 result = around(func, *args, **kws)
             else:
-                result = func(*args, **kws)
+                # result = func(*args, **kws)
+                if len(args) <= arg:
+                    funcname = getattr(func, '__name__', 'singledispatch function')
+                    raise TypeError(f'{funcname} requires at least {arg} positional argument(s)')
+                result = func.dispatch(args[arg].__class__)(*args, **kws)
             if after:
                 result = after(result, *args, **kws)
             return result
