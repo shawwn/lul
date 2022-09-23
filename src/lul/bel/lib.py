@@ -14,6 +14,9 @@ import __main__ as G
 # def no(x):
 #     return id(x, nil) or falsep(x)
 
+def either(x, y):
+    return x if ok(x) else y
+
 def atom(x):
     return no(id(type(x), quote("pair")))
 
@@ -1577,16 +1580,14 @@ def set(*args):
 
 
 
-globals()["print"] = print
 globals()["."] = lambda *args: cdr(get(*args))
-globals()["+"] = operator.add
-globals()["-"] = operator.sub
-globals()["*"] = operator.mul
-globals()["/"] = operator.truediv
-globals()["//"] = operator.floordiv
-eval = eval
-exec = exec
-compile = compile
+globals()["+"] = lambda *args: either(reduce(lambda a, b: a + b, args), 0)
+globals()["-"] = lambda *args: -args[0] if py.len(args) == 1 else either(reduce(lambda b, a: a - b, rev(args)), 0)
+globals()["*"] = lambda *args: either(reduce(lambda a, b: a * b, args), 1)
+globals()["/"] = lambda *args: either(reduce(lambda b, a: a / b, rev(args)), 1)
+globals()["//"] = lambda *args: either(reduce(lambda b, a: a // b, rev(args)), 1)
+globals()["**"] = lambda *args: either(reduce(lambda b, a: a ** b, rev(args)), 1)
+globals()["%"] = lambda *args: either(reduce(lambda b, a: a % b, rev(args)), 0)
 
 # import sys
 # sys.setrecursionlimit(10_000)
