@@ -1564,8 +1564,8 @@ def vec2list(v):
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
 # [print(repr(x.car)) for x in vec2list(belforms)]
 
-def readbel(string):
-    return vec2list(reader.read_from_string(string)[0])
+def readbel(string, more=None):
+    return vec2list(reader.read_from_string(string, mode="bel", more=more)[0])
 
 # >>> bel( readbel("(join join join)"))
 # (<function join at 0x105a02a60> . <function join at 0x105a02a60>)
