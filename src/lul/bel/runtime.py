@@ -91,7 +91,6 @@ def apply(f, *args, **kws):
 
 # globe = globals
 
-unset = join("%unset")
 o = "o"
 
 def err(x, *args, **kws):

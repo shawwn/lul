@@ -796,12 +796,20 @@ class Cell(Cons):
             def set_cdr(v):
                 if isinstance(kvs, std.Mapping):
                     if isinstance(kvs, std.MutableMapping):
-                        kvs[self.car] = v
+                        if unboundp(v):
+                            if self.car in kvs:
+                                del kvs[self.car]
+                        else:
+                            kvs[self.car] = v
                     else:
                         raise Error("Can't update non-mutable mapping")
                 else:
                     assert not consp(kvs)
-                    setattr(kvs, k, v)
+                    if unboundp(v):
+                        if hasattr(kvs, k):
+                            delattr(kvs, k)
+                    else:
+                        setattr(kvs, k, v)
         super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
 
 @dispatch()
@@ -905,5 +913,13 @@ def cdr_tuple(x):
 
 nil = None
 t = True
+
+unset = Cons("%unset", nil)
+
+def unbound():
+    return unset
+
+def unboundp(x):
+    return x is unset
 
 lul_init()
