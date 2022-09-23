@@ -1691,13 +1691,16 @@ class BelConsole(code.InteractiveConsole):
 
 
 @contextlib.contextmanager
-def letattr(obj, key, val, *default):
-    prev = getattr(obj, key, *default)
+def letattr(obj, key, val):
+    prev = getattr(obj, key, unset)
     setattr(obj, key, val)
     try:
         yield
     finally:
-        setattr(obj, key, prev)
+        if prev is unset:
+            delattr(obj, key)
+        else:
+            setattr(obj, key, prev)
 
 def interact(banner=None, readfunc=None, local=None, exitmsg=None):
     """Closely emulate the interactive Python interpreter.
@@ -1722,6 +1725,6 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
             import readline
         except ImportError:
             pass
-    with letattr(sys, 'ps1', '> ', '>>> '):
-        with letattr(sys, 'ps2', '  ', '... '):
+    with letattr(sys, 'ps1', '> '):
+        with letattr(sys, 'ps2', '  '):
             console.interact(banner, exitmsg)
