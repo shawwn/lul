@@ -80,14 +80,14 @@ def nom(x):
 def quote(x):
     return sym(x)
 
-def apply(f, *args):
+def apply(f, *args, **kws):
     xs = args[-1]
     if isinstance(xs, Cons):
         xs = xs.list()
     elif xs is nil:
         xs  = ()
     args = tuple(args[0:-1]) + tuple(xs)
-    return f(*args)
+    return f(*args, **kws)
 
 # globe = globals
 
