@@ -900,7 +900,7 @@ def car_tuple(x):
 
 @cdr.register(tuple)
 def cdr_tuple(x):
-    return XCONS(x[1:])
+    return it if (it := x[1:]) else nil
 
 
 nil = None
