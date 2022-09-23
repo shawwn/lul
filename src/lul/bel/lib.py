@@ -789,7 +789,7 @@ def sigerr(msg, s, r, m):
         if isinstance(msg, Exception):
             raise msg
         else:
-            return err(quote("no-err"))
+            return err(quote("no-err"), msg)
 
 # (mac fu args
 #   `(list (list smark 'fut (fn ,@args)) nil))

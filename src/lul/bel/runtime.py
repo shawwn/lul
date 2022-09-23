@@ -94,5 +94,5 @@ def apply(f, *args):
 unset = join("unset")
 o = "o"
 
-def err(x):
-    raise Error(x)
+def err(x, *args, **kws):
+    raise Error(x, *args, *([kws] if kws else []))
