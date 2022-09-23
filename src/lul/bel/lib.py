@@ -1609,16 +1609,40 @@ class BelCommandCompiler(codeop.CommandCompiler):
 class BelConsole(code.InteractiveConsole):
     def __init__(self, locals=None, filename="<console>"):
         super().__init__(locals=locals, filename=filename)
+        self.locals = locals
         self.compile = BelCommandCompiler()
         self.that = nil
         self.thatexpr = nil
 
-    def runcode(self, form) -> None:
+    def exec(self, form, locals=None):
+        if locals is None:
+            locals = self.locals
         # print(json.dumps(form))
         self.thatexpr = vec2list(form)
         self.that = bel(self.thatexpr)
         if self.that is not None:
             print(prrepr(self.that))
+
+    def runcode(self, code):
+        """Execute a code object.
+
+        When an exception occurs, self.showtraceback() is called to
+        display a traceback.  All exceptions are caught except
+        SystemExit, which is reraised.
+
+        A note about KeyboardInterrupt: this exception may occur
+        elsewhere in this code, and may not always be caught.  The
+        caller should be prepared to deal with it.
+
+        """
+        # reload(M)
+        try:
+            self.exec(code, self.locals)
+        except SystemExit:
+            raise
+        except:
+            self.showtraceback()
+
 
 
 @contextlib.contextmanager
