@@ -193,7 +193,8 @@ def DEFSYM(sym: Lisp_Object, name: str):
     assert XSYMBOL(sym).name == name
 
 def init_obarray_once():
-    V.obarray = make_vector(OBARRAY_SIZE, make_fixnum(0))
+    # V.obarray = make_vector(OBARRAY_SIZE, make_fixnum(0))
+    V.obarray = []
     global initial_obarray
     initial_obarray = V.obarray
     # staticpro( & initial_obarray);
