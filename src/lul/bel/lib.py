@@ -691,7 +691,7 @@ def mev_(s, r, pg):
 
 mev_tail = CV.ContextVar[bool]("mev_tail", default=False)
 
-class JumpToMev(Exception):
+class JumpToMev(BaseException):
     def __init__(self, s, r, pg):
         self.s = s
         self.r = r
