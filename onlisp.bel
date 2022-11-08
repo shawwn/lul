@@ -1,0 +1,21 @@
+(mac set rest
+  (if (no rest)
+      '(do)
+    (let (lh rh . more) rest
+      `(do (assign (where ,lh t) ,rh)
+           (set ,@more)))))
+
+
+(mac import (lib)
+  (list 'set lib (list '__import__ (list 'quote lib))))
+
+(import time)
+
+(set seconds (:time time))
+
+(mac time body
+  (letu (v w)
+    `(let ,v (seconds)
+       (let ,w (do ,@body)
+         (prn (* 1000 (- (seconds) ,v)) " msec")
+         ,w))))

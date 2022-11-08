@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import operator
 import sys
 import os
@@ -57,6 +58,7 @@ T9 = TypeVar("T9")
 nil = None
 t = True
 
+# noinspection PyTypeChecker
 unset: None = ["%unset"]
 
 def unbound():
@@ -126,12 +128,15 @@ def repr_call(f, **args):
 
 @functools.singledispatch
 def nameof(x, unknown="<unknown>"):
-    if isinstance(x, str):
+    if isinstance(x, str) and x.isprintable():
         return x
     return getattr(x, "__qualname__", getattr(x, "__name__", unknown)).replace(".<locals>", "").replace(".<lambda>", ".<fn>")
 
 def stringp(x):
     return isinstance(x, str)
+
+def vectorp(x):
+    return isinstance(x, (list, tuple))
 
 def SDATA(x):
     assert stringp(x)
@@ -755,7 +760,7 @@ def dispatch(after=None, around=None):
         return wrapper
     return inner
 
-prrepr_ = [lambda x: x if py.isinstance(x, str) else repr(x)]
+prrepr_ = [lambda x: x if py.isinstance(x, str) and x.isprintable() else repr(x)]
 
 def prrepr(x):
     return prrepr_[0](x)
@@ -765,7 +770,7 @@ def inner(s):
         return s[1:-1]
     return s
 
-def prcons(self):
+def prcons(self: Cons[A, D]):
     if consp(cdr(self)):
         if car(self) == "quote":
             return "'" + prrepr(car(cdr(self)))
@@ -778,7 +783,7 @@ def prcons(self):
         if car(self) == "fn" and prrepr(car(cdr(self))) == "(_)" and null(cdr(cdr(cdr(self)))):
             return "[" + inner(prrepr(car(cdr(cdr(self))))) + "]"
     s = []
-    for tail in self:
+    for tail in self.tails():
         try:
             s += [prrepr(car(tail))]
         except CircularIteration:
@@ -792,122 +797,161 @@ def prcons(self):
 A = TypeVar("A")
 D = TypeVar("D")
 
+
+class PostInit(ABC):
+    __slots__ = ()
+
+    # def __init__(self, **kws):
+    #     if kws:
+    #         raise Error("Unconsumed keyword args in __init__", kws)
+
+    def __post_init__(self, **kws):
+        if kws:
+            raise Error("Unconsumed keyword args in __post_init__", kws)
+
+
+FrozenSpec: TypeAlias = Optional[Literal[False, True, "car", "cdr"]]
+
 class Freezable(ABC):
-    frozen_: Optional[Literal[False, True, "car", "cdr"]]
+    # __slots__ = ("frozen_",)
+
+    # frozen_: FrozenSpec
+    #
+    # def __init__(self, *, frozen: FrozenSpec = False):
+    #     self.frozen_ = frozen
+
+    # def __post_init__(self, *, frozen: FrozenSpec = unset, **kws):
+    #     if frozen is unset:
+    #         if isinstance(self, FrozenCar):
+    #             frozen = "car"
+    #         if isinstance(self, FrozenCdr):
+    #             frozen = {"car": True}.get(frozen, "cdr")
+    #     self.set_frozen(frozen)
+    #     super().__post_init__(**kws)
 
     @property
-    def frozen(self):
-        return self.frozen_
+    def frozen(self) -> bool:
+        return self.is_frozen(True)
 
-    @frozen.setter
-    def frozen(self, value: Optional[Literal[False, True, "car", "cdr"]]):
+    def set_frozen(self, value: FrozenSpec):
         self.frozen_ = value
 
-    @property
-    def frozen_car(self) -> bool:
-        return self.frozen is True or self.frozen == "car"
+    def is_frozen(self, which: FrozenSpec) -> bool:
+        if (not which) == (not self.frozen_):
+            return True
+        elif stringp(which):
+            return self.frozen_ == which
+        else:
+            return False
 
-    @property
-    def frozen_cdr(self) -> bool:
-        return self.frozen is True or self.frozen == "cdr"
+    # @frozen.setter
+    # def frozen(self, value: FrozenSpec):
+    #     self.set_frozen(value)
 
-    def __init__(self, *, frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
-        self.frozen_ = frozen
+    def check_frozen(self, which: FrozenSpec = True):
+        if self.is_frozen(which):
+            error("Can't set frozen %s", which if stringp(which) else "value")
 
 class HasCar(Generic[A, D], Freezable):
-    # frozen: Optional[Literal[False, True, "car"]]
+    # frozen: FrozenSpec
     car_: Optional[A]
     # get_car: Optional[Callable[[HasCar[A, D]], A]]
     # set_car: Optional[Callable[[HasCar[A, D], A], A]]
 
     def __init__(self,
                  car: Optional[A] = unset,
+                 *,
                  # get_car: Optional[Callable[[HasCar[A, D]], A]] = None,
                  # set_car: Optional[Callable[[HasCar[A, D], A], A]] = None,
-                 frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
-        super().__init__(frozen=frozen)
+                 frozen: FrozenSpec = unset):
+        # super().__init__(frozen=frozen)
         self.car_ = init(self.car_default, car)
         # self.set_car = set_car
         # self.get_car = get_car
+        # super().__post_init__(frozen=frozen)
 
     def car_default(self) -> A:
         return unset
 
     @property
     def car(self) -> A:
-        # return self.get_car(self) if self.get_car else self.car_
+        return self.get_car()
+
+    def get_car(self) -> A:
         return self.car_
 
     @car.setter
     def car(self, value: Optional[A]):
         self.set_car(value)
-        # if self.set_car:
-        #     self.set_car(self, value)
-        # else:
-        #     self.car_ = value
 
-    def check_frozen_car(self):
-        if self.frozen_car:
-            error("Can't set frozen car")
-
-    def set_car(self, value: Optional[A]) -> Optional[A]:
+    def set_car(self, value: Optional[A] = unset) -> Optional[A]:
         self.check_frozen_car()
-        self.car_ = value
+        self.car_ = init(self.car_default, car)
         return value
 
+    @property
+    def frozen_car(self) -> bool:
+        return self.is_frozen("car")
+
+    def check_frozen_car(self):
+        return self.check_frozen("car")
+
+
 class HasCdr(Generic[A, D], Freezable):
-    # frozen: Optional[Literal[False, True, "cdr"]]
+    # frozen: FrozenSpec
     cdr_: Optional[D]
     # get_cdr: Optional[Callable[[HasCdr[A, D]], D]]
     # set_cdr: Optional[Callable[[HasCdr[A, D], D], D]]
 
     def __init__(self,
                  cdr: Optional[D] = unset,
+                 *,
                  # get_cdr: Optional[Callable[[HasCdr[A, D]], D]] = None,
                  # set_cdr: Optional[Callable[[HasCdr[A, D], A], D]] = None,
-                 frozen: Optional[Literal[False, True, "cdr", "cdr"]] = False):
-        super().__init__(frozen=frozen)
+                 frozen: FrozenSpec = unset):
         self.cdr_ = init(self.cdr_default, cdr)
         # self.set_cdr = set_cdr
         # self.get_cdr = get_cdr
+        self.__post_init__(frozen=frozen)
 
     def cdr_default(self) -> D:
         return unset
 
     @property
     def cdr(self) -> D:
-        # return self.get_cdr(self) if self.get_cdr else self.cdr_
+        return self.get_cdr()
+
+    def get_cdr(self) -> D:
         return self.cdr_
 
     @cdr.setter
     def cdr(self, value: Optional[D]):
         self.set_cdr(value)
-        # if self.set_cdr:
-        #     self.set_cdr(self, value)
-        # else:
-        #     self.cdr_ = value
 
-    def check_frozen_cdr(self):
-        if self.frozen_cdr:
-            error("Can't set frozen cdr")
-
-    def set_cdr(self, value: Optional[D]) -> Optional[D]:
+    def set_cdr(self, value: Optional[D] = unset) -> Optional[D]:
         self.check_frozen_cdr()
-        self.cdr_ = value
+        self.cdr_ = init(self.cdr_default, cdr)
         return value
 
+    @property
+    def frozen_cdr(self) -> bool:
+        return self.is_frozen("cdr")
+
+    def check_frozen_cdr(self):
+        return self.check_frozen("cdr")
+
 class FrozenCar(HasCar[A, D]):
-    def __init__(self, car: Optional[A] = unset, *, frozen: Optional[Literal[False, True, "cdr", "cdr"]] = "car"):
+    def __init__(self, car: Optional[A] = unset, *, frozen: FrozenSpec = "car"):
         assert frozen is True or frozen == "car"
         super().__init__(car, frozen=frozen)
 
 class FrozenCdr(HasCdr[A, D]):
-    def __init__(self, cdr: Optional[D] = unset, *, frozen: Optional[Literal[False, True, "cdr", "cdr"]] = "cdr"):
+    def __init__(self, cdr: Optional[D] = unset, *, frozen: FrozenSpec = "cdr"):
         assert frozen is True or frozen == "cdr"
         super().__init__(cdr, frozen=frozen)
 
 # class HasCdr(Freezable[A, D]):
-#     frozen: Optional[Literal[False, True, "cdr"]]
+#     frozen: FrozenSpec
 #     cdr_: Optional[D]
 #     get_cdr: Optional[Callable[[HasCdr[A, D]], D]]
 #     set_cdr: Optional[Callable[[HasCdr[A, D], D], D]]
@@ -925,32 +969,208 @@ class FrozenCdr(HasCdr[A, D]):
 #         else:
 #             self.cdr_ = value
 
-@functools.total_ordering
-class Cons(HasCar[A, D], HasCdr[A, D]):
-    def __init__(self,
-                 car: Optional[A] = unset,
-                 cdr: Optional[D] = unset,
-                 # set_car: Optional[Callable[[Cons[A, D], D], D]] = None,
-                 # set_cdr: Optional[Callable[[Cons[A, D], A], A]] = None,
-                 # get_car: Optional[Callable[[Cons[A, D]], A]] = None,
-                 # get_cdr: Optional[Callable[[Cons[A, D]], D]] = None,
-                 frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
-        HasCar.__init__(self, car=car, frozen=frozen)
-        HasCdr.__init__(self, cdr=cdr, frozen=frozen)
-        # super(HasCar, self).__init__(self, car=car, frozen=frozen)
-        # self.car_ = car
-        # self.cdr_ = cdr
-        # self.set_car = set_car
-        # self.set_cdr = set_cdr
-        # self.get_car = get_car
-        # self.get_cdr = get_cdr
-        # self.frozen = frozen
+ConsType = TypeVar("ConsType", bound="Cons")
+ConsType2 = TypeVar("ConsType2", bound="Cons")
 
+# @functools.total_ordering
+# class Cons(HasCar[A, D],
+#            HasCdr[A, D]):
+#     def __init__(self,
+#                  car: Optional[A] = unset,
+#                  cdr: Optional[D] = unset,
+#                  *,
+#                  frozen: FrozenSpec = False,
+#                  **kws):
+#         HasCar.__init__(self, car=car, frozen=frozen)
+#         HasCdr.__init__(self, cdr=cdr, frozen=frozen)
+#         self.__post_init__(frozen=frozen, **kws)
+#
+#     def __post_init__(self, **kws):
+#         pass
+
+# https://docs.python.org/3/library/abc.html
+"""
+class Foo:
+    def __getitem__(self, index):
+        ...
+    def __len__(self):
+        ...
+    def get_iterator(self):
+        return iter(self)
+
+class MyIterable(ABC):
+
+    @abstractmethod
+    def __iter__(self):
+        while False:
+            yield None
+
+    def get_iterator(self):
+        return self.__iter__()
 
     @classmethod
-    def new(cls: Type[T], src: Cons[A, D], **kws) -> T:
-        # return cls(src.car_, src.cdr_, src.set_car, src.set_cdr, src.get_car, src.get_cdr)
-        return cls(src.car_, src.cdr_, frozen=src.frozen_, **kws)
+    def __subclasshook__(cls, C):
+        if cls is MyIterable:
+            if any("__iter__" in B.__dict__ for B in C.__mro__):
+                return True
+        return NotImplemented
+
+MyIterable.register(Foo)
+"""
+
+# @runtime_checkable
+# class SupportsCar(Protocol[A]):
+#     @property
+#     def car(self) -> A: return None
+#
+# @runtime_checkable
+# class SupportsCdr(Protocol[D]):
+#     @property
+#     def cdr(self) -> D: return None
+#
+# import typing
+#
+# @runtime_checkable
+# class SupportsCons(SupportsCar[A],
+#                    SupportsCdr[D],
+#                    Protocol[A, D],
+#                    metaclass=typing._ProtocolMeta,
+#                    ):
+#     _is_protocol = True
+
+class Car(ABC, Generic[A]):
+    @abc.abstractmethod
+    def get_car(self) -> A: ...
+
+    @property
+    def car(self) -> A:
+        return self.get_car()
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Car:
+            if any("car" in B.__dict__ for B in C.__mro__):
+                return True
+        return NotImplemented
+
+class FrozenCar(ABC):
+    pass
+    # @classmethod
+    # def __subclasshook__(cls, C):
+    #     if cls is FrozenCar:
+    #         return Car.__subclasshook__(C): # also supports car
+
+class MutableCar(ABC, Generic[A]):
+    @abc.abstractmethod
+    def get_car(self) -> A: ...
+    @abc.abstractmethod
+    def set_car(self, value: A): ...
+
+    @property
+    def car(self) -> A:
+        return self.get_car()
+
+    @car.setter
+    def car(self, value: A):
+        self.set_car(value)
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is MutableCar:
+            # mutable?
+            if any("set_car" in B.__dict__ for B in C.__mro__):
+                # not frozen?
+                if not issubclass(C, FrozenCar):
+                    return True
+        return NotImplemented
+
+CadrType = TypeVar("CadrType", bound="Cadr")
+
+class Cadr(Car[A]):
+    @abc.abstractmethod
+    def get_cdr(self) -> Optional[Cadr[A]]:
+        raise NotImplementedError
+
+    @property
+    def cdr(self) -> Optional[Cadr[A]]:
+        return self.get_cdr()
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Cadr:
+            if Car.__subclasshook__(C): # also supports Car
+                if any("cdr" in B.__dict__ for B in C.__mro__):
+                    return True
+        return NotImplemented
+
+    def for_each_tail_safe(self) -> Generator[Cadr[A]]:
+        tortoise: Optional[Cadr[A]] = self
+        hare: Optional[Cadr[A]] = self
+        while consp(hare):
+            yield hare
+            hare = cdr(hare)
+            if not consp(hare):
+                break
+            yield hare
+            hare = cdr(hare)
+            tortoise = cdr(tortoise)
+            if eq(hare, tortoise):
+                raise CircularIteration()
+
+    def for_each_tail_unsafe(self) -> Generator[Cadr[A]]:
+        hare: Optional[Cadr[A]] = self
+        while consp(hare):
+            yield hare
+            hare = cdr(hare)
+
+    def tails(self) -> Generator[Cadr[A]]:
+        return self.for_each_tail_safe()
+        # return self.for_each_tail_unsafe() # TODO: does this give a speed boost?
+
+    def values(self) -> Generator[A]:
+        for tail in self.tails():
+            yield car(tail)
+
+    def __iter__(self):
+        return iter(self.values())
+
+    def __getitem__(self, item):
+        return [x for x in self or []][item]
+
+
+
+def _check():
+    x = MutableCar(1)
+    x.car
+    l: Cadr[int] = Cadr()
+    l.car
+    l.cdr
+
+@dataclasses.dataclass
+@functools.total_ordering
+class Cons(Generic[A, D], Cadr[A]):
+    car_: A = nil
+    cdr_: D = nil
+    frozen_: FrozenSpec = False
+
+    def get_car(self) -> A: return self.car_
+    def get_cdr(self) -> D: return self.cdr_
+    def set_car(self, car: A) -> A: self.car_ = car; return car
+    def set_cdr(self, cdr: D) -> D: self.cdr_ = cdr; return cdr
+
+    @property
+    def car(self) -> A: return self.get_car()
+    @property
+    def cdr(self) -> D: return self.get_cdr()
+    @car.setter
+    def car(self, value): self.set_car(value)
+    @cdr.setter
+    def cdr(self, value): self.set_cdr(value)
+
+    @classmethod
+    def new(cls: Type[ConsType[A, D]], src: Optional[Cons[A, D]], **kws) -> Optional[ConsType[A, D]]:
+        if not null(src):
+            return cls(src.car_, src.cdr_, kws.pop("frozen", src.frozen_))
 
     # @property
     # def car(self) -> A:
@@ -978,32 +1198,31 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
     #     else:
     #         self.cdr_ = value
 
-    def __iter__(self):
-        tortoise: Optional[Cons[A, D]] = self
-        hare: Optional[Cons[A, D]] = self
-        while consp(hare):
-            yield hare
-            hare = cdr(hare)
-            if not consp(hare):
-                break
-            yield hare
-            hare = cdr(hare)
-            tortoise = cdr(tortoise)
-            if eq(hare, tortoise):
-                raise CircularIteration()
+    if TYPE_CHECKING:
+        def for_each_tail_safe(self) -> Generator[Cons[A, D]]: ...
+        def for_each_tail_unsafe(self) -> Generator[Cons[A, D]]: ...
+        def tails(self) -> Generator[Cons[A, D]]: ...
 
     def list(self, proper=True):
         if null(self):
             return []
         tail = nil
-        return [car(tail := x) for x in self] + ([] if proper or null(cdr(tail)) or not consp(cdr(tail)) else [".", cdr(tail)])
+        return [car(tail := x) for x in self.tails()] + ([] if proper or null(cdr(tail)) or not consp(cdr(tail)) else [".", cdr(tail)])
 
     @overload
-    def at(self, i: Optional[int]) -> Cons[A, D]: ...
+    def at(self, i: Optional[int]) -> Optional[Cons[A, D]]: ...
     @overload
-    def at(self, i: slice) -> List[Cons[A, D]]: ...
+    def at(self, i: slice) -> Optional[List[Cons[A, D]]]: ...
     def at(self, i):
-        return self.list()[i]
+        try:
+            out = self.list()[i]
+        except IndexError:
+            return nil
+        if isinstance(i, slice):
+            out = XCONS(out)
+            if consp(out):
+                out = type(self).new(out)
+        return out
 
     def cut(self, i: Optional[int] = None, j: Optional[int] = None):
         return self.at(slice(i, j))
@@ -1014,7 +1233,7 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
         return prcons(self)
 
     def __getitem__(self, item):
-        return nil if null(self) else ([x for x in self][item])
+        return [x for x in self or []][item]
         # for tail in self:
         #     if item <= 0:
         #         break
@@ -1026,7 +1245,7 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
     def __len__(self):
         n = 0
         if not null(self):
-            for tail in self:
+            for _tail in self.tails():
                 n += 1
         return n
 
@@ -1045,9 +1264,14 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
         else:
             return hash(py.id(self))
 
-ConsListType = TypeVar("ConsListType", bound="ConsList")
+LispListType = TypeVar("LispListType", bound="LispList")
 
-class ConsList(Cons[A, Optional[ConsListType]]):
+LispListSelf: TypeAlias = "LispList[A]"
+
+class LispList(Cons[A, Optional[LispListSelf]]):
+
+    def __post_init__(self):
+        return super().__post_init__()
     @property
     def cdr(self) -> Optional[ConsList[A]]:
         return super().cdr
@@ -1055,15 +1279,26 @@ class ConsList(Cons[A, Optional[ConsListType]]):
     def cdr(self, value: ConsList[A]):
         super().cdr = value
 
-    def set_cdr(self, value: Optional[ConsList[A]]) -> Optional[ConsList[A]]:
-        return super().set_cdr(value)
+    # def set_cdr(self, value: Optional[ConsList[A]]) -> Optional[ConsList[A]]:
+    #     return super().set_cdr(value)
+
+    @classmethod
+    def new(cls: Type[LispListType[T]], src: Iterable[T], **kws) -> Optional[LispListType[A]]:
+        l = py.list(src)
+        # if l:
+        #     return super().new(l[0], **kws)
+        return error("todo")
 
 
-if TYPE_CHECKING:
-    ConsList = Union[Cons[A, None], Tuple[A, ...]]
+
+ConsList: TypeAlias = Optional[Union[Cons[A, D], Tuple[A, ...]]]
 
 def _check():
     foo: ConsList[int] = Cons("foo",None)
+    foo: ConsList[int] = Cons(42,None)
+    foo: ConsList[str] = Cons(42)
+    foo: ConsList[int] = Cons(42)
+    ConsList.new(foo)
     foo.set_cdr(21)
     foo.set_cdr("asdf")
     foo.set_cdr(nil)
@@ -1073,6 +1308,11 @@ def _check():
     foo.set_cdr((1,2,3))
     foo.set_cdr(("a",2,3))
     foo.set_cdr(nil)
+
+    foo1 = foo.cdr
+    foo2 = foo1.cdr
+    i: int = foo2.car
+    baz: ConsList[Cons[str, bool]] = Cons("foo")
 
 
 class SupportsHash(Protocol):
@@ -1090,7 +1330,7 @@ class Cell(Cons[SupportsHash, D]):
     # cdr: D
 
     def __init__(self, kvs: Dict[SupportsHash, D], k: SupportsHash, *default: Optional[D],
-                 frozen: Optional[Literal[False, True, "car", "cdr"]] = "car",
+                 frozen: FrozenSpec = "car",
                  # get_car=None, set_car=None, get_cdr=None, set_cdr=None,
                  ):
         if modulep(kvs):
@@ -1113,7 +1353,8 @@ class Cell(Cons[SupportsHash, D]):
         #             assert not consp(kvs)
         #             setattr(kvs, k, v)
         # super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
-        super().__init__(car=(k, kvs), cdr=default, frozen=frozen)
+        # super().__init__(car=(k, kvs), cdr=default, frozen=frozen)
+        super().__init__((k, kvs), default, frozen)
 
     @property
     def key(self) -> Union[str, SupportsHash]:
@@ -1238,10 +1479,7 @@ def consp(x) -> bool:
 
 @dispatch()
 def integerp(x) -> bool:
-    if isinstance(x, bool):
-        return False
-    else:
-        return isinstance(x, int)
+    return py.type(x) is int or (isinstance(x, int) and not isinstance(x, bool))
 
 @dispatch()
 def numberp(x) -> bool:
@@ -1278,6 +1516,8 @@ def streamp(x) -> bool:
 @overload
 def car(x: None): ...
 @overload
+def car(x: Car[A]) -> A: ...
+@overload
 def car(x: HasCar[A, D]) -> A: ...
 @overload
 def car(x: Tuple[A, D]) -> A: ...
@@ -1295,6 +1535,8 @@ def car(x):
 
 @overload
 def cdr(x: None): ...
+@overload
+def cdr(x: Cadr[A]) -> Optional[Cadr[A]]: ...
 @overload
 def cdr(x: HasCdr[A, D]) -> D: ...
 @overload

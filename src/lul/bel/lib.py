@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
+import io
 import reprlib
 import weakref
 
@@ -55,6 +57,98 @@ if TYPE_CHECKING:
     TG: TypeAlias = "Dict[str, T]"
     TM: TypeAlias = "List2[TP[E, T], TG[T]]"
 
+@dispatch()
+def signature(x):
+    try:
+        return inspect.signature(x), x
+    except (TypeError, ValueError):
+        return nil
+
+def afut(x):
+    return consp(x) and begins(car(x), list(smark, quote("fut")))
+
+@signature.register(Cons)
+def signature_Cons(x):
+    if isa(quote("clo"))(x):
+        return cadr(cddr(x)), x
+    if isa(quote("mac"))(x):
+        return signature(caddr(x))
+    if afut(x):
+        e, a = car(x), cadr(x)
+        return signature(caddr(e))
+    return nil
+
+# def propget(f, k, default=nil):
+#     return getattr(inspect.unwrap(f), k, default)
+#
+# def propset(f, k, v):
+#     return [setattr(inspect.unwrap(f), k, v)] and v
+#
+# def prop(name, default=nil):
+#     def prop_inner(f, *set, init=nil):
+#         if set:
+#             return propset(f, name, *set)
+#         else:
+#             return propget(f, name, default=default)
+#     return rename(prop_inner, f"{nameof(prop)}!{nom(name)}")
+
+# cache = prop("cache")
+
+# @dispatch()
+def memo(x):
+    if not callable(x):
+        return memo(rename(lambda: x, f"#<memo {nom(x)}>"))
+    return functools.wraps(x)(functools.lru_cache(maxsize=None)(x))
+    # def memoized(*args, **kws):
+    #     get((args, kws), cache(memoized), equal)
+    #     put((args, kws), result, getattr(memoized, "cache", nil))
+
+def callback(x):
+    return lambda: x
+
+def then(x):
+    return lambda: x()
+
+# # @dispatch()
+# def delay(x: Callable):
+#     # out = memo(x)
+#     return rename(memo(lambda: x()), f"#<delay {nom(x)}>")
+
+@memo
+def delayed(x):
+    return callable(x) and str(signature(x)) == "()"
+
+def force(x):
+    if delayed(x):
+        return x()
+    return x
+
+@car.register(py.list)
+def hd(l: List):
+    return l[0] if l else nil
+
+@cdr.register(py.list)
+def tl(l: List):
+    return l[1:] or nil
+
+@overload
+def rename(name: str) -> Callable: ...
+
+@overload
+def rename(f: T, name: str) -> T: ...
+
+@dispatch()
+def rename(f, name):
+    f.__qualname__ = f.__name__ = name
+    return f
+
+@rename.register(str)
+def renaming(name: str):
+    # @functools.wraps(rename)
+    # def renamer(f):
+    #     return rename(f, name)
+    return rename(part(rename, name=name), f"[{nameof(rename)} _ '{nom(name)}]")
+
 def compose(*fs):
     return reduce(compose2, fs or (idfn,))
 
@@ -64,17 +158,17 @@ def compose2(f, g):
         return f(apply(g, args, **kws))
     # f_name = getattr(f, "__qualname__", getattr(f, "__name__", "<unknown>"))
     # g_name = getattr(g, "__qualname__", getattr(g, "__name__", "<unknown>"))
-    f_name = nameof(f)
-    g_name = nameof(g)
-    f_then_g.__qualname__ = f_then_g.__name__ = f"{f_name}:{g_name}"
-    return f_then_g
+    # f_name = nameof(f)
+    # g_name = nameof(g)
+    # f_then_g.__qualname__ = f_then_g.__name__ = f"{f_name}:{g_name}"
+    return rename(f_then_g, f"{nameof(f)}:{nameof(g)}")
 
 
 def vec2list(v: Optional[List[T]]) -> Optional[Union[T, ConsList[T]]]:
     if py.isinstance(v, (py.list, py.tuple)):
         if len(v) >= 3 and v[-2] == ".":
             l = vec2list(v[0:-2])
-            xdr(l[-1], vec2list(v[-1]))
+            xdr(lastcdr(l), vec2list(v[-1]))
             return l
         return list(*[vec2list(x) for x in v])
     return quote(v)
@@ -90,13 +184,20 @@ def list2vec(l: Cons) -> Optional[List]:
         return []
     return l
 
-def cons2vec(xs):
+def cons2vec(xs: Union[T, Cons[A, D]]) -> Union[T, List[A]]:
     if isinstance(xs, Cons):
         return xs.list()
     elif null(xs):
         return []
     return xs
 
+def vec2cons(xs: Iterable[A]) -> Optional[ConsList[A]]:
+    if isinstance(xs, Cons):
+        return xs
+    elif null(xs):
+        xs: None
+        return xs
+    return XCONS(xs)
 
 # def no(x):
 #     return id(x, nil) or falsep(x)
@@ -203,6 +304,9 @@ def list(a: T0, b: T1, c: T2, d: T3, e: T4, f: T5, g: T6) -> Cons[T0, Cons[T1, C
 def list(*args, **kws):
     return append(XCONS(y_zip(args, kws)), nil)
 
+assert cons2vec(list(1,2,3)) == [1,2,3]
+assert cons2vec(append(list(1,2,3), list(4))) == [1,2,3,4]
+
 # (def map (f . ls)
 #   (if (no ls)       nil
 #       (some no ls)  nil
@@ -306,7 +410,8 @@ def do_f(x, *args):
 #   `((fn (,parms) ,@body) ,val))
 @macro_
 def let(parms, val, *body):
-    return [["fn", [parms], *body], val]
+    return ["%let", parms, val, *body]
+    # return [["fn", [parms], *body], val]
     # return list(list(quote("fn"), list(parms), *body), val)
 
 # (mac macro args
@@ -341,17 +446,14 @@ def mac(n, *rest):
 #       (let v (uvar)
 #         `(let ,v ,(car args)
 #            (if ,v ,v (or ,@(cdr args)))))))
+@macro_
 def or_(*args):
-    # if no(args):
-    #     return nil
-    # elif yes(v := car(args)):
-    #     return v
-    # else:
-    #     return apply(or_, cdr(args))
-    for x in args:
-        if yes(x):
-            return x
-    return nil
+    if no(args):
+        return nil
+    v = uvar("or")
+    return ["let", v, car(args),
+            ["if", v, v, ["or", *(cdr(args) or [])]]]
+globals()["or"] = or_
 
 def or_f(*args):
     for f in args:
@@ -363,15 +465,11 @@ def or_f(*args):
 # (mac and args
 #   (reduce (fn es (cons 'if es))
 #           (or args '(t))))
+@macro_
 def and_(*args):
-    if no(args):
-        return t
-    else:
-        x = nil
-        for x in args:
-            if no(x):
-                return nil
-        return x
+    return reduce(lambda *es: ["if", *es],
+                  args or [t])
+globals()["and"] = and_
 
 def and_f(*args):
     if no(args):
@@ -393,8 +491,8 @@ def equal(*args):
     if no(cdr(args)):
         return t
     elif no(some(atom, args)):
-        return and_(apply(equal, map(car, args)),
-                    apply(equal, map(cdr, args)))
+        return and_f(lambda: apply(equal, map(car, args)),
+                     lambda: apply(equal, map(cdr, args)))
     else:
         return all(lambda _: id(_, car(args)), cdr(args))
 
@@ -524,15 +622,26 @@ def case_f(expr, *args) -> Callable[[], Any]:
 @macro_
 def iflet(var, *args):
     """
-    (if (no (cdr args))
-        (car args)
-        (let v (uvar)
-          `(let ,v ,(car args)
-             (if ,v
-                 (let ,var ,v ,(cadr args))
-                 (iflet ,var ,@(cddr args))))))
-    """
-    return ["iflet", "it", *args]
+    (mac iflet (var . args)
+      (if (no (cdr args))
+          (car args)
+          (let v (uvar)
+            `(let ,v ,(car args)
+               (%if ,v
+                   (let ,var ,v ,(cadr args))
+                   (iflet ,var ,@(cddr args)))))))"""
+    if no(cdr(args)):
+        return car(args)
+    if not consp(var):
+        return ["let", var, car(args),
+                ["%if", var, cadr(args),
+                 ["iflet", var, *(cddr(args) or ())]]]
+    else:
+        v = uvar("iflet_v")
+        return ["let", v, car(args),
+                ["%if", v,
+                 ["let", var, v, cadr(args)],
+                 ["iflet", var, *(cddr(args) or ())]]]
 
 # (mac aif args
 #   `(iflet it ,@args))
@@ -621,33 +730,32 @@ def rem(x, ys, f=unset):
 
 # (def get (k kvs (o f =))
 #   (find [f (car _) k] kvs))
-def get(k, kvs, f=unset):
-    if f is unset:
-        f = equal
-    if null(kvs):
-        return kvs
-    if isinstance(kvs, Cons):
-        # return find(lambda _: f(car(_), k), kvs)
-        for tail in kvs:
-            cell = car(tail)
-            name, value = car(cell), cdr(cell)
-            if value is unset:
-                continue
-            if f(name, k):
-                return cell
-        if dictp(it := cdr(kvs[-1])):
-            kvs = it
-        elif modulep(it):
-            kvs = it
-        else:
-            return nil
-    if modulep(kvs):
-        kvs = kvs.__dict__
-    assert f in [equal, id]
-    out = Cell(kvs, k, unset)
-    if cdr(out) is unset:
-        return nil
-    return out
+# def get(k, kvs, f=unset):
+#     if f is unset:
+#         f = equal
+#     if null(kvs):
+#         return kvs
+#     if isinstance(kvs, Cons):
+#         # return find(lambda _: f(car(_), k), kvs)
+#         for cell in kvs.values():
+#             name, value = car(cell), cdr(cell)
+#             if value is unset:
+#                 continue
+#             if f(name, k):
+#                 return cell
+#         # if dictp(it := cdr(kvs[-1])):
+#         #     kvs = it
+#         # elif modulep(it):
+#         #     kvs = it
+#         else:
+#             return nil
+#     if modulep(kvs):
+#         kvs = kvs.__dict__
+#     assert f in [equal, id]
+#     out = Cell(kvs, k, unset)
+#     if cdr(out) is unset:
+#         return nil
+#     return out
 
 def get(k, kvs, f=unset, new=nil):
     return locate(k, kvs, new, f)
@@ -664,13 +772,11 @@ def locate(k, kvs, new=nil, f=unset):
     if null(kvs):
         return kvs
     if isinstance(kvs, Cons):
-        for tail in kvs:
-            cell = car(tail)
+        for cell in kvs.values():
             if locatable(cell):
                 if yes(it := locate(k, cell, new, f)):
                     return it
-            else:
-                assert alistp(tail)
+            elif consp(cell):
                 name, value = car(cell), cdr(cell)
                 if yes(f(k, name)):
                     if value is unset:
@@ -834,12 +940,12 @@ def literal(e):
     else:
         return string(e)
 
-namecs = dict(
+namecs = globals().setdefault("namecs", dict(
     bel="\a",
     tab="\t",
     lf="\n",
     cr="\r",
-    sp=" ")
+    sp=" "))
 
 def evliteral(e):
     # if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
@@ -848,7 +954,7 @@ def evliteral(e):
     if char(e):
         e: str
         name = e[1:]
-        return namecs.get(name, name)
+        return force(namecs.get(name, name))
     return e
 
 # (def variable (e)
@@ -938,8 +1044,8 @@ def mev_(s, r, p_g):
     p, g = car(p_g), cadr(p_g)
     if no(s) and (no(p) or no(cdr(binding(quote("main"), s)))):
         return if_f(lambda: p,
-                    lambda: ([print("discard", r), breakpoint()] and sched(p, g)),
-                    lambda: ([print("leftover", it) if yes(it := cdr(r)) else (print("return", car(r)) and breakpoint())] and car(r)))()
+                    lambda: ([ero("discard", r), breakpoint()] and sched(p, g)),
+                    lambda: ([ero("leftover", it) if yes(it := cdr(r)) else (ero("return", car(r)) and breakpoint())] and car(r)))()
     else:
         return sched(schedule(s, r, p), g)
 
@@ -1057,18 +1163,6 @@ def _check():
     e, a = car(e_a), cadr(e_a)
 
 
-
-# class BelParameters(Cons):
-#     @property
-#     def e(self):
-#         return car(self)
-#     @property
-#     def a(self):
-#         return cadr(self)
-#     def __repr__(self):
-#         return f"BelExpression(e={self.e!r})"
-
-
 def current():
     return mev_tail.get()
 
@@ -1080,19 +1174,17 @@ class JumpToMev(Exception):
         self.prev = prev
 
     @property
-    def thread(self):
+    def thread(self) -> BelThread:
         return BelThread.new(cons(self.s, self.r))
 
     @property
-    def expr(self):
-        for tail in self.thread.s or []:
-            expr: BelExpression = car(tail)
+    def expr(self) -> BelExpression:
+        for expr in self.thread.s or []: # type: BelExpression
             return expr
 
     @property
     def lexenv(self):
-        for tail in self.thread.s or []:
-            expr: BelExpression = car(tail)
+        for expr in self.thread.s or []: # type: BelExpression
             if yes(expr.a):
                 return expr.a
 
@@ -1205,31 +1297,50 @@ def syntaxp(x):
                 return t
             # if x.startswith("!") and len(x) > 1:
             #     return t
-            for c in [":", "|", "!"]:
+            if x.startswith(".") and len(x) > 1:
+                return t
+            for c in [":", "|", "!", "."]:
                 if not (x.endswith(c) or x.startswith(c)):
                     if c in x:
                         return t
     return nil
 
-def evsyntax(x):
+def evsyntax(x, recurse=nil, self=unset, was=unset):
+    def go(e, recurse=recurse, self=self, was=x):
+        if equal(recurse, quote("once")):
+            recurse = nil
+        return evsyntax(e, recurse=recurse, self=self, was=was)
     if not syntaxp(x):
+        if recurse and consp(x):
+            return map(go, x)
+        if self is not unset:
+            if atom(self):
+                if stringp(self):
+                    return ":" + self
+                return err("nonstring-atom", self, x)
+            return list
         return quote(x)
     x: str
     if len(x) > 0 and x[-1] in ":|!.":
-        return evsyntax(x[:-1]) + x[-1]
+        return go(x[:-1]) + x[-1]
+    if x.startswith("."):
+        rest = go(x[1:])
+        if stringp(rest):
+            return ":" + rest
+        # (.foo.bar x 2) => (:foo (:bar
     if ":" in x and "!" not in x and "|" not in x:
         lh, _, rh = x.partition(":")
-        return list(quote("compose"), evsyntax(lh), evsyntax(rh))
+        return list(quote("compose"), go(lh), go(rh))
     if x.startswith("!") and len(x) > 1:
-        return list(quote("upon"), evsyntax(x[1:]))
+        return list(quote("upon"), go(x[1:]))
     if "!" in x and "|" not in x:
         name, _, arg = x.rpartition("!")
-        return list(evsyntax(name), list(quote("quote"), quote(arg)))
+        return list(go(name), list(quote("quote"), quote(arg)))
     if "|" in x:
         name, _, test = x.rpartition("|")
-        return list(quote("t"), quote(name), evsyntax(test))
+        return list(quote("t"), quote(name), go(test))
     if x.startswith("~") and len(x) > 1:
-        return list(quote("compose"), quote("no"), evsyntax(x[1:]))
+        return list(quote("compose"), quote("no"), go(x[1:]))
     assert False, "Bad syntax"
 
 # (def ev (((e a) . s) r m)
@@ -1419,6 +1530,90 @@ def _check():
     # car(s), cadr(s)
     # cadr(list(1,2))
 
+import ansi_styles
+fgcol = ansi_styles.ansiStyles.color.ansi16m
+fgclo = ansi_styles.ansiStyles.color.close
+bgcol = ansi_styles.ansiStyles.bgColor.ansi16m
+bgclo = ansi_styles.ansiStyles.bgColor.close
+
+def color(r: int, g: int, b: int):
+    return r, g, b
+
+def gray(v: int):
+    return color(v, v, v)
+
+sand = color(246, 246, 239)
+site_color = color(180, 180, 180)
+border_color = color(180, 180, 180)
+textgray = gray(130)
+noob_color = color(60, 150, 60)
+linkblue = color(0, 0, 190)
+orange   = color(255, 102, 0)
+darkred  = color(180, 0, 0)
+darkblue = color(0, 0, 120)
+
+def prs(*args,
+        fg: Optional[Tuple[int, int, int]] = None,
+        bg: Optional[Tuple[int, int, int]] = None,
+        sep = " ",
+        end = "\n",
+        flush = False,
+        file: io.IOBase = None):
+    if ok(fg) and fg is not True: print(end=apply(fgcol, fg), file=file)
+    if ok(bg) and bg is not True: print(end=apply(bgcol, bg), file=file)
+    if ok(fg): end = fgclo + end
+    if ok(bg): end = bgclo + end
+    print(*(arg for arg in args if ok(arg)), sep=sep, end=end, flush=flush, file=file)
+    return last(args)
+
+prn = rename("prn")(part(prs, sep=""))
+pr = rename("pr")(part(prn, end="", flush=True))
+
+ero = rename("ero")(part(print, file=sys.stderr))
+
+def with_tostring(f):
+    @functools.wraps(f)
+    def captured(*args, **kws):
+        return call_with_stdout_to_string(lambda: f(*args, **kws))
+    return captured
+
+def highlighter(fg, *, sep=" ", **kws):
+    return with_tostring(part(pr, sep=sep, fg=fg, **kws))
+
+hl = rename("hl")(highlighter(orange))
+hl2 = rename("hl2")(highlighter(noob_color))
+
+
+@macro_
+def fontcolor(color, *body):
+    return ["do",
+            ["pr", ["apply", "fgcol", color]],
+            ["after", ["do", *body],
+             ["pr", "fgclo"]]]
+
+def prcall(f, *args, **kws):
+    if ok(f):
+        ero(indentation() + repr_call(f, **{str(i): v for i, v in enumerate(args)}, **kws))
+    return with_indent(4 if ok(f) else 0)
+
+# def trace(f):
+#     cons
+#     sig = inspect.signature(f)
+#     def inner(*args, **kws):
+#         it = sig.bind(*args, **kws)
+#         it.args
+#
+# @contextlib.contextmanager
+# def prncall(f, *args, **kws):
+#     if ok(f):
+#         prcall(f, *args, **kws)
+#     with with_indent(2):
+#         yield
+
+def almost(l):
+    return rev(cdr(rev(l)))
+
+
 
 
 class Fut(Cons):
@@ -1434,13 +1629,16 @@ class Fut(Cons):
     @reprlib.recursive_repr()
     def __repr__(self):
         if self.doc:
-            return f"#<fut {self.name} {prrepr(self.doc())}>"
+            return f"#<fut {hl(self.name)} {hl2(prrepr(self.doc()))}>"
         else:
-            return f"#<fut {self.name}>"
+            return f"#<fut {hl(self.name)}>"
 
 
-# (mac fu args
-#   `(list (list smark 'fut (fn ,@args)) nil))
+"""
+(mac fu args
+  `(list (list smark 'fut (fn ,@args)) nil))
+"""
+
 # def fu(f):
 #     return list(list(smark, quote("fut"), f), nil)
 def fu(a: Cons, *, doc=nil):
@@ -1530,87 +1728,21 @@ def if_(es, a, s, r, m, test=unset, form=unset):
     if no(es):
         return mev(s, cons(nil, r), m)
     else:
+        fut = fu(a, doc=lambda: cons(form, es))
         return mev(cons(list(car(es), a),
                         if_f(lambda: cdr(es),
-                             lambda: cons(fu(a)((lambda s, r, m:
-                                                 if2(form, cdr(es), a, s, r, m, test=test))),
+                             lambda: cons(fut((lambda s, r, m:
+                                               if2(form, cdr(es), a, s, r, m, test=test))),
                                           s),
                              lambda: s)()),
                    r,
                    m)
 
-import ansi_styles
-fgcol = ansi_styles.ansiStyles.color.ansi16m
-fgclo = ansi_styles.ansiStyles.color.close
-bgcol = ansi_styles.ansiStyles.bgColor.ansi16m
-bgclo = ansi_styles.ansiStyles.bgColor.close
-
-def color(r: int, g: int, b: int):
-    return r, g, b
-
-def gray(v: int):
-    return color(v, v, v)
-
-sand = color(246, 246, 239)
-site_color = color(180, 180, 180)
-border_color = color(180, 180, 180)
-textgray = gray(130)
-noob_color = color(60, 150, 60)
-linkblue = color(0, 0, 190)
-orange   = color(255, 102, 0)
-darkred  = color(180, 0, 0)
-darkblue = color(0, 0, 120)
-
-def prs(*args,
-        fg: Optional[Tuple[int, int, int]] = None,
-        bg: Optional[Tuple[int, int, int]] = None,
-        sep = " ",
-        end = "\n",
-        flush = False,
-        **kws):
-    if ok(fg) and fg is not True: print(end=fgcol(*cons2vec(fg)))
-    if ok(bg) and bg is not True: print(end=bgcol(*cons2vec(bg)))
-    if ok(fg): end = fgclo + end
-    if ok(bg): end = bgclo + end
-    print(*(arg for arg in args if ok(arg)), sep=sep, end=end, flush=flush, **kws)
-    return last(args)
-
-prn = part(prs, sep="")
-pr = part(prn, end="", flush=True)
-
-@macro_
-def fontcolor(color, *body):
-    return ["do",
-            ["pr", ["apply", "fgcol", color]],
-            ["after", ["do", *body],
-             ["pr", "fgclo"]]]
-
-def prcall(f, *args, **kws):
-    if ok(f):
-        prn(indentation() + repr_call(f, **{str(i): v for i, v in enumerate(args)}, **kws))
-    return with_indent(4 if ok(f) else 0)
-
-def trace(f):
-    cons
-    sig = inspect.signature(f)
-    def inner(*args, **kws):
-        it = sig.bind(*args, **kws)
-        it.args
-#
-# @contextlib.contextmanager
-# def prncall(f, *args, **kws):
-#     if ok(f):
-#         prcall(f, *args, **kws)
-#     with with_indent(2):
-#         yield
-
-def almost(l):
-    return rev(cdr(rev(l)))
-
 @form_("%do")
 def do_form(es, a, s, r, m):
+    fut = fu(a, doc=lambda: cons("%do", es))
     return mev(append(map(lambda e: list(e, a), es),
-                      list(fu(a)(lambda s, r, m: do_form1(es, s, r, m))),
+                      list(fut(lambda s, r, m: do_form1(es, s, r, m))),
                       s),
                r,
                m)
@@ -1696,10 +1828,11 @@ def where(es, a, s, r, m):
 #       (sigerr 'cannot-bind s r m)))
 @form_("dyn")
 def dyn(es, a, s, r, m):
+    fut = fu(a, doc=lambda: cons("dyn", es))
     v, e1, e2 = car(es), cadr(es), caddr(es)
     if yes(variable(v)):
         return mev(cons(list(e1, a),
-                        fu(a)(lambda s, r, m: dyn2(v, e2, a, s, r, m)),
+                        fut(lambda s, r, m: dyn2(v, e2, a, s, r, m)),
                         s),
                    r,
                    m)
@@ -1817,7 +1950,6 @@ def evcall2(es, a, s, op_r, m):
             args2 = stash(args, kws) if kws else args
             with prcall("%call" if kws else nil, args=args, keys=ks, vals=vals, kws=kws, argv=args2):
                 # args, r2 = car(it), cadr(it)
-                #return applyf(op, args2, a, s, r2, m)
                 return applyf(op, args2, a, s, r2, m)
         return mev(append(map(lambda _: list(_, a), append(xs, vs)),
                           cons(f,
@@ -1938,10 +2070,9 @@ def applyfunc(f, args, kws, a, s, r, m):
 #                        (mev (cons (list e a) s) r m))
 #                      (sigerr 'unapplyable s r m))))))
 def applylit(f, args, a, s, r, m):
-    # if yes(inwhere(s)) and yes(it := find(lambda _: car(_)(f), locfns)):
     args, kws = unstash(args)
-    if yes(it := and_f(lambda: [print("inwhere", that) if yes(that := inwhere(s)) else nil] and that,
-                       lambda: find(lambda _: print("locfn", _, f, args) or car(_)(f), locfns))):
+    if yes(it := and_f(lambda: [ero("inwhere", that) if yes(that := inwhere(s)) else nil] and that,
+                       lambda: find(lambda _: ero("locfn", _, f, args) or car(_)(f), locfns))):
         return cadr(it)(f, args, a, s, r, m)
     elif callable(f) and not consp(f):
         return applyfunc(f, args, kws, a, s, r, m)
@@ -2032,7 +2163,7 @@ def whereloc(k, kvs, new=nil):
 
 @setter(is_(lambda: cadr))
 def loc_is_cadr(args, new):
-    print(args)
+    ero(args)
     breakpoint()
     return list(car(args), quote("a"))
 
@@ -2060,7 +2191,7 @@ def loc_print(_f, args, _a, s, r, m):
 
 @loc_(is_(lambda: get))
 def loc_is_get(_f, args, _a, s, r, m):
-    # print("loc_is_get", _f, args, car(s), car(r))
+    # ero("loc_is_get", _f, args, car(s), car(r))
     k, kvs = car(args), cadr(args)
     cell = get(k, kvs, unset, car(inwhere(s)))
     if null(cell):
@@ -2203,11 +2334,24 @@ def applyprim(f, args, s, r, m):
 #        r
 #        m))
 def applyclo(parms, args, kws, env, body, s, r, m):
-    fut = fu(env, doc=lambda: list(":parms", parms, ":args", args, ":kws", kws, ":env", env, ":body", body))
-    return mev(cons(fut(lambda s, r, m: pass_(parms, args, kws, env, s, r, m)),
-                    fut(lambda s, r, m: mev(cons(list(body, car(r)), s),
+    def fut(doc):
+        return fu(env, doc=lambda: list(f"applyclo{doc}", parms, args, kws, env, body))
+    # fut = fu(env, doc=lambda: list(":parms", parms, ":args", args, ":kws", kws, ":env", env, ":body", body))
+    return mev(cons(fut("#1")(lambda s, r, m: pass_(parms, args, kws, env, s, r, m)),
+                    fut("#2")(lambda s, r, m: mev(cons(list(body, car(r)), s),
                                             cdr(r),
                                             m)),
+                    s),
+               r,
+               m)
+
+@form_("%let")
+def let_form(es, a, s, r, m):
+    var, val = car(es), cadr(es)
+    body = macroexp_do(cddr(es))
+    fut = fu(a, doc=lambda: cons("%let", es))
+    return mev(cons(list(val, a),
+                    fut(lambda s, r, m: applyclo(var, car(r), {}, a, body, s, cdr(r), m)),
                     s),
                r,
                m)
@@ -2225,7 +2369,7 @@ def applyclo(parms, args, kws, env, body, s, r, m):
 def pass_(pat, arg, kws, env, s, r, m):
     # prn("pass", pat, arg)
     with prcall("pass_" and nil, pat=pat, arg=arg, kws=kws):
-        pat = evsyntax(pat)
+        pat = evsyntax(pat) # for foo|int forms
         def ret(_):
             return mev(s, cons(_, r), m)
         if no(pat):
@@ -2287,14 +2431,17 @@ def typecheck(var_f, arg, kws, env, s, r, m):
 #                       m)))
 def destructure(p_ps, arg, kws, env, s, r, m):
     with prcall("destructure" and nil, p_ps=p_ps, arg=arg, kws=kws, env=env):
-        fut = fu(env, doc=lambda: list(":p_ps", p_ps, ":arg", arg, ":kws", kws, ":env", env))
+        # fut = fu(env, doc=lambda: list("destructure", p_ps, arg, kws, ":env", env))
+        def fut(doc):
+            return fu(env, doc=lambda: list(f"destructure{doc}", p_ps, arg, ":kws", kws))
+        # fut = fu(env, doc=lambda: list("destructure", p_ps, arg, kws, env))
         # fut = fu(env, doc=lambda: repr_call("", p_ps=p_ps, arg=arg, kws=kws, env=env))
         p, ps = car(p_ps), cdr(p_ps)
         if no(arg):
             if yes(caris(p, o)):
                 return mev(cons(list(caddr(p), env),
-                                fut(lambda s, r, m: pass_(cadr(p), car(r), kws, env, s, cdr(r), m)),
-                                fut(lambda s, r, m: pass_(ps, nil, kws, car(r), s, cdr(r), m)),
+                                fut("(o)#1")(lambda s, r, m: pass_(cadr(p), car(r), kws, env, s, cdr(r), m)),
+                                fut("(o)#2")(lambda s, r, m: pass_(ps, nil, kws, car(r), s, cdr(r), m)),
                                 s),
                            r,
                            m)
@@ -2303,8 +2450,8 @@ def destructure(p_ps, arg, kws, env, s, r, m):
         elif yes(atom(arg)):
             return sigerr(quote("atom-arg"), s, r, m)
         else:
-            return mev(cons(fut(lambda s, r, m: pass_(p, car(arg), kws, env, s, r, m)),
-                            fut(lambda s, r, m: pass_(ps, cdr(arg), kws, car(r), s, cdr(r), m)),
+            return mev(cons(fut("#1")(lambda s, r, m: pass_(p, car(arg), kws, env, s, r, m)),
+                            fut("#2")(lambda s, r, m: pass_(ps, cdr(arg), kws, car(r), s, cdr(r), m)),
                             s),
                        r,
                        m)
@@ -2635,14 +2782,11 @@ def read(x, eof=None):
     else:
         return reader.read(x, eof=eof)
 
-def readall(string):
+def readall(string: str) -> List[Union[str, List]]:
     return reader.read_all(reader.stream(string, mode="bel"))
 
-def readallbel(string):
-    return vec2list(reader.read_all(reader.stream(string, mode="bel")))
-
-def readbel(string):
-    return vec2list([0])
+def readallbel(string: str):
+    return vec2list(readall(string))
 
 def compilebel(source):
     form = readallbel(source)
@@ -2681,21 +2825,13 @@ def quoted(x):
     else:
         return cons(quote("list"), map(quoted, x))
 
-def quoteargs(args):
-    # return map(lambda _: list(quote("quote"), _), args)
-    return map(quote1, args)
-
 def callbel(f, *args, **kws):
     if consp(f):
-        # return bel(prn('callbel', cons(f, map(quoted, args))))
-        # args = append(args, XCONS(y_zip(**kws)))
         if yes(isa(quote("mac"))(f)):
             # return bel(callbel(caddr(f), *args, **kws))
-            # return callbel(caddr(f), *cons2vec(map(quote1, XCONS(args))), **kws)
-            return bel(callbel(caddr(f), *cons2vec(map(quote1, XCONS(args))), **kws))
+            return bel(callbel(caddr(f), *map(quote1, args), **kws))
         else:
-            args = quoteargs(args)
-        return bel(cons(f, args))
+            return bel(cons(f, map(quote1, args)))
     else:
         return f(*args, **kws)
 
@@ -2736,25 +2872,35 @@ def quasisplicep(x, depth):
                  lambda: no(atom(x)),
                  lambda: equal(car(x), quote("unquote-splicing")))
 
-def lastcdr(l):
+def lastcdr(l: Cons[A, D]) -> Cons[A, D]:
     assert consp(l)
-    return l[-1]
+    # return l[-1]
+    tail = l
+    for tail in l.tails():
+        pass
+    return tail
 
-def add(l, x):
+def add(l: Cons[A, D], x: A):
     cell = lastcdr(l)
     assert null(cdr(cell))
-    return xdr(cell, list(x))
+    xdr(cell, list(x))
 
-def last(l):
-    return car((XCONS(l) or [(nil,)])[-1])
+def last(l: Sequence[A]) -> A:
+    try:
+        return l[-1]
+    except IndexError:
+        pass
 
-def step(form):
+# def last(l: Cons[A, D]) -> A:
+#     # return car((XCONS(l) or [(nil,)])[-1])
+#     return car(lastcdr(l))
+
+def step(form: Iterable[T]) -> Generator[T]:
     if not null(form):
-        tail = nil
-        for tail in XCONS(form):
-            yield car(tail)
-        # if not null(it := cdr(tail)) and atom(it):
-        #     yield
+        # for tail in form.tails():
+        #     yield car(tail)
+        for x in form:
+            yield x
 
 
 # (define quasiquote-list (form depth)
@@ -2966,7 +3112,8 @@ def vir_symbol(k, *args):
 def table(kvs=unset) -> py.dict:
     if kvs is unset:
         kvs = nil
-    return py.dict([(car(x), cdr(x)) for x in (vec2list(kvs).list() if not null(kvs) else [])])
+    # return py.dict([(car(x), cdr(x)) for x in (vec2list(kvs).list() if not null(kvs) else [])])
+    return py.dict([(car(x), cdr(x)) for x in XCONS(kvs)])
 
 #
 # (vir tab (f args)
@@ -3127,6 +3274,128 @@ def dbg():
     import pdb
     pdb.pm()
 
+
+import argparse
+
+if TYPE_CHECKING:
+    class BelArguments(Protocol):
+        filename: Optional[str]
+        verbose: bool
+else:
+    BelArguments = argparse.Namespace
+
+if 'argv' not in globals():
+    argv: BelArguments = BelArguments(filename=None, verbose=False)
+
+def bel_parser():
+    parser = argparse.ArgumentParser(
+        description="Bel Lisp",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument('--verbose', '-v',
+        action='store_true',
+        help='verbose flag')
+
+    parser.add_argument(
+        "filename",
+        help="Run a bel file as a script",
+        nargs="?",
+    )
+    return parser
+
+def bel_args(args=unset) -> BelArguments:
+    if args is unset:
+        args = sys.argv[1:]
+    return bel_parser().parse_args(args)
+
+def read_string(source: str, filename: Optional[str] = None):
+    return readall(source)
+
+def read_file(filename: str):
+    with open(filename) as f:
+        return f.read()
+
+def macroexp_do(body):
+    if null(body):
+        return list("do")
+    if consp(body):
+        if len(body) == 1:
+            return car(body)
+        return cons("do", body)
+    else:
+        assert vectorp(body)
+        if len(body) == 1:
+            return body[0]
+        return ["do", *body]
+
+def macroexp_body(form):
+    if caris(form, "do"):
+        return cdr(form)
+    return list(form)
+
+def read_from_file(filename: str) -> List[Union[str, List]]:
+    source = read_file(filename)
+    body = read_string(source, filename=filename)
+    return body
+
+def compile_body(body: List):
+    return macroexp_do([compile(form) for form in body])
+
+def compile(form):
+    return vec2list(form)
+
+def run_toplevel(form):
+    if argv.verbose:
+        prn(">", form, fg=orange)
+    result = bel(form)
+    if argv.verbose:
+        prn(result)
+
+def run(*body: Union[str, List], filename=None):
+    for form in body:
+        expr = compile(form)
+        run_toplevel(expr)
+
+def load(filename: str):
+    body = read_from_file(filename)
+    return run(*body, filename=filename)
+
+def main(args=unset, *, locals=None):
+    global argv
+    argv = bel_args(args)
+    if stringp(argv.filename):
+        return load(argv.filename)
+    else:
+        return interact(local=locals)
+
+
+
+if not globals().get("initialized"):
+    bell("""
+    (mac import (lib (o as)) `(set ,(if as as lib) (__import__ ',lib)))
+    (mac w/frame (a . body) (letu ua `(let ,ua (append scope ,a) (dyn scope ,ua ((fn () ,@body))))))
+    """)
+    initialized = True
+
+
+# outs = globals().get("outs", sys.stdout)
+
+def call_with_stdout(f, stdout: io.IOBase):
+    prev = sys.stdout
+    try:
+        sys.stdout = stdout
+        return f()
+    finally:
+        sys.stdout = prev
+
+def call_with_stdout_to_string(f):
+    out = io.StringIO()
+    call_with_stdout(f, out)
+    return out.getvalue()
+
+@macro_
+def tostring(*body):
+    return ["call_with_stdout_to_string", ["fn", [], *body]]
 
 
 

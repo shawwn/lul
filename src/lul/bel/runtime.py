@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import types
+import weakref
 from typing import *
 
 from ..common import *
@@ -25,8 +26,6 @@ class NSMeta(type):
             setattr(self, id, value)
             return value
 
-def delay(x):
-    return lambda: x
 
 def part(f, *args, **kws):
     return functools.wraps(f)(lambda *args1, **kws1: f(*args, *args1, **{**kws, **kws1}))
@@ -161,7 +160,9 @@ def applyargs(*args):
 def call(f, *args, **kws):
     return f(*args, **kws)
 
-def kwcall(f, *args, **kws):
+def kwcall(f, args=nil, kws=nil):
+    xs = tuple(*(args or ()))
+    ks = dict(**(kws or {}))
     args, keys = y_unzip(args)
     return call(f, *args, **kws, **keys)
 
@@ -203,7 +204,13 @@ def keysym(x):
 #            ,@body)
 #          (setq ,h (if (keywordp (car ,h)) (cddr ,h) (cdr ,h))))
 #        nil)))
-def y_for(h):
+
+KT: TypeAlias = "Union[str, int, SupportsHash]"
+K = TypeVar("K", bound=KT)
+
+@dispatch()
+def y_each(h: T) -> Generator[Tuple[K, T]]:
+    h = XCONS(h)
     i = -1
     while not null(h):
         if yes(keyword(car(h))):
@@ -217,32 +224,153 @@ def y_for(h):
             h = cdr(h)
         yield k, v
 
-def y_unzip1(h):
-    xs = []
-    kvs = {}
-    i = -1
-    for k, v in y_for(h):
-        # if integerp(k) and k >= 0:
-        #     if len(xs) <= k:
-        #         xs.extend([nil] * ((k + 1) - len(xs)))
-        #     xs[k] = v
+@y_each.register(std.Mapping)
+def y_each_tab(h: Mapping[K, T]) -> Generator[Tuple[K, T]]:
+    xs: List[Tuple[int, T]] = []
+    for k, v in h.items():
         if integerp(k):
-            i += 1
-            assert k == i
-            assert len(xs) == i
-            xs.append(v)
+            xs.append((k, v))
         else:
-            kvs[k] = v
-    return xs, kvs
+            yield k, v
+    # ensure values (integer indices) are yielded in increasing order.
+    xs = sorted(xs, key=lambda x: x[0])
+    for k, v in xs:
+        yield k, v
 
-def y_items(h):
-    return py.tuple((k, v) for k, v in y_for(h))
+import argparse
 
-def y_keys(h) -> Dict:
-    return py.dict((k, v) for k, v in y_for(h) if not integerp(k))
+@y_each.register(types.ModuleType)
+@y_each.register(argparse.Namespace)
+def y_each_ns(h: types.ModuleType) -> Generator[Tuple[K, T]]:
+    return y_each(h.__dict__)
 
-def y_vals(h) -> List:
-    return py.list(v for k, v in y_for(h) if integerp(k))
+class InconsistentIteration(Error):
+    pass
+
+@dispatch()
+def y_step(l):
+    prev = 0
+    for k, v in y_each(l):
+        if integerp(k):
+            if k < prev:
+                return err("backwards-iteration")
+            prev = k
+            yield v
+
+@dispatch()
+def y_length(h, upto: Optional[int] = None):
+    if upto is None:
+        return 1 + max((k for k, v in y_each(h) if integerp(k)), default=-1)
+    else:
+        n = 0
+        for n, v in enumerate(y_step(h)):
+            if n >= upto:
+                break
+        return n
+
+@y_length.register(std.Mapping)
+def y_length_tab(h: Mapping, upto: Optional[int] = None):
+    return 1 + max(filter(integerp, h.keys()), default=-1)
+
+def y_none(h): return y_length(h, 0) == 0
+def y_some(h): return y_length(h, 0) > 0
+def y_many(h): return y_length(h, 1) > 1
+def y_one(h): return y_length(h, 1) == 1
+def y_two(h): return y_length(h, 2) == 2
+
+
+import weakref
+
+if 'refs' not in globals():
+    refs = weakref.WeakValueDictionary[int, weakref.WeakKeyDictionary["Ref"]]()
+
+LT: TypeAlias = Union[MutableMapping[K, T], MutableSequence[Union[K, T]], MutableSet[Union[K, T]]]
+L = TypeVar("L", bound=LT)
+
+
+@dataclasses.dataclass(eq=False)
+class Ref(Generic[K, T], metaclass=ABCMeta):
+    key: K
+    default: T
+    frames: Tuple[Union[MutableMapping[K, T], MutableSequence[Union[K, T]], MutableSet[Union[K, T]]], ...]
+    FrameType: TypeAlias = "Tuple[Union[MutableMapping[K, T], MutableSequence[Union[K, T]], MutableSet[Union[K, T]]], ...]"
+    def __post_init__(self):
+        self.mark()
+    @property
+    def id(self):
+        return py.tuple(py.id(l) for l in self.frames)
+    def __hash__(self):
+        return hash(self.id)
+    @property
+    def marks(self) -> Optional[weakref.WeakKeyDictionary[Ref[K, T]]]:
+        self.marks_ = refs.setdefault(self.id, weakref.WeakKeyDictionary())
+        return self.marks_
+    def mark(self):
+        self.marks[self] = self.frames
+        assert self.marks[self] == self.frames
+    def others(self):
+        return py.list(self.marks.keys())
+    def __repr__(self):
+        return repr_call(nameof(py.type(self)), key=self.key, frames=self.frames, id=self.id)
+
+
+def _check():
+    vmark: List[str] = ["%vmark"]
+    smark: List[str] = ["%smark"]
+    # badmarks: List[Ref[int, str]] = [Ref(i, True, vmark) for i in range(10)]
+    vmarks: List[Ref[int, str]] = [Ref(i, "", vmark) for i in range(10)]
+    smarks: List[Ref[int, str]] = [Ref(i, "", smark) for i in range(10)]
+    uu = vmarks[0].key
+    uuv = vmarks[0].frames
+    assert len(vmarks[0].others()) == 10
+    del vmarks[-1]
+    import gc
+    gc.collect()
+    assert len(vmarks[0].others()) == 9
+
+_check()
+
+
+
+
+
+
+
+# class Slot(Cons[KT, D]):
+#     def __init__(self,
+#                  key: KT,
+#                  cdr: Optional[D] = unset,
+#                  frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
+#         HasCar.__init__(self, car=car, frozen=frozen)
+#         HasCdr.__init__(self, cdr=cdr, frozen=frozen)
+#
+#     def __init__(self, l, k: KT, ):
+
+@dispatch()
+def y_get(l, k: SupportsHash, test: Optional[Callable[KT, KT], Optional[bool]] = None):
+    return Cell(l, k)
+
+@y_get.register(Cons)
+def y_get(l, k: KT, test: Optional[Callable[[KT, KT], Optional[bool]]] = None):
+    if test:
+        for k1, v in y_each(l):
+            if yes(test(k, k1)):
+                return v
+    else:
+        for k1, v in y_each(l):
+            if k == k1:
+                return v
+
+
+
+def y_items(h: Container[T]) -> List[Tuple[str, T]]:
+    return py.list((k, v) for k, v in y_each(h))
+
+def y_keys(h: Container[T]) -> Dict[str, T]:
+    return py.dict((k, v) for k, v in y_each(h) if not integerp(k))
+
+def y_vals(h: Container[T]) -> List[T]:
+    return py.list(v for k, v in y_each(h) if integerp(k))
 
 def y_unzip(h) -> Tuple[List, Dict[str]]:
     return y_vals(h), y_keys(h)
@@ -252,6 +380,24 @@ def y_zip(args, kws) -> List:
     for k, v in kws.items():
         xs.extend([keysym(k), v])
     return xs
+
+def y_list(*args, **kws):
+    return y_zip(args, kws)
+
+def y_seq(l):
+    args, kws = y_unzip(l)
+    return y_zip(args, kws)
+
+# def y_step(l):
+#     for x in y_vals(l):
+#         yield x
+#
+# def y_each(l):
+#     for k, v in y_for(l):
+#         yield i, x
+#     for k, v in y_items(l):
+#         if not numberp(k):
+#             yield k, v
 
 @nameof.register(Cons)
 def nameof_cons(x):
