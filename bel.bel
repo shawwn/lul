@@ -67,11 +67,11 @@
 (mac macro args
   `(list 'lit 'mac (fn ,@args)))
 
-(mac def (n . rest)
-  `(set ,n (fn ,@rest)))
+;(mac def (n . rest)
+;  `(set ,n (fn ,@rest)))
 
-(mac mac (n . rest)
-  `(set ,n (macro ,@rest)))
+;(mac mac (n . rest)
+;  `(set ,n (macro ,@rest)))
 
 (mac or args
   (if (no args)
@@ -195,13 +195,23 @@
 (def is (x)
   [= _ x])
 
+;(mac eif (var (o expr) (o fail) (o ok))
+;  (with (v (uvar)
+;         w (uvar)
+;         c (uvar))
+;    `(let ,v (join)
+;       (let ,w (ccc (fn (,c)
+;                      (dyn err [,c (cons ,v _)] ,expr)))
+;         (if (caris ,w ,v id)
+;             (let ,var (cdr ,w) ,fail)
+;             (let ,var ,w ,ok))))))
+
 (mac eif (var (o expr) (o fail) (o ok))
-  (with (v (uvar)
-         w (uvar)
-         c (uvar))
-    `(let ,v (join)
-       (let ,w (ccc (fn (,c)
-                      (dyn err [,c (cons ,v _)] ,expr)))
+  (with (v (uvar 'v)
+         w (uvar 'w)
+         c (uvar 'c))
+    `(let ,v (join 'eif-v)
+       (let ,w (dyn err [cons ,v _] ,expr)
          (if (caris ,w ,v id)
              (let ,var (cdr ,w) ,fail)
              (let ,var ,w ,ok))))))
@@ -309,8 +319,8 @@
 
 (set forms (list (cons smark evmark)))
 
-(mac form (name parms . body)
-  `(set forms (put ',name ,(formfn parms body) forms)))
+;(mac form (name parms . body)
+;  `(set forms (put ',name ,(formfn parms body) forms)))
 
 (def formfn (parms body)
   (with (v  (uvar)
@@ -694,13 +704,13 @@
          i1
          args))
 
-(def i/ (x y (o q))
-  (if (no x)   (list q nil)
-      (i< x y) (list q x)
-               (i/ (udrop y x) y (i+ q i1))))
-
-(def i^ (x y)
-  (foldr i* i1 (map (con x) y)))
+;(def i/ (x y (o q))
+;  (if (no x)   (list q nil)
+;      (i< x y) (list q x)
+;               (i/ (udrop y x) y (i+ q i1))))
+;
+;(def i^ (x y)
+;  (foldr i* i1 (map (con x) y)))
 
 (def r+ ((xn xd) (yn yd))
   (list (i+ (i* xn yd) (i* yn xd))
@@ -1410,9 +1420,9 @@
   (and x (string x) (~tail [get _ names id] x)))
 
 (def prstring (x s names hist)
-  (prc \" s)
+  (prc \" s) ; ")
   (presc x \" s)
-  (prc \" s)
+  (prc \" s) ; \"")
   hist)
 
 (def presc (cs esc s)

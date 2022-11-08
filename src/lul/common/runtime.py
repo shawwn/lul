@@ -57,6 +57,7 @@ T9 = TypeVar("T9")
 nil = None
 t = True
 
+# noinspection PyTypeChecker
 unset: None = ["%unset"]
 
 def unbound():
@@ -126,12 +127,15 @@ def repr_call(f, **args):
 
 @functools.singledispatch
 def nameof(x, unknown="<unknown>"):
-    if isinstance(x, str):
+    if isinstance(x, str) and x.isprintable():
         return x
     return getattr(x, "__qualname__", getattr(x, "__name__", unknown)).replace(".<locals>", "").replace(".<lambda>", ".<fn>")
 
 def stringp(x):
     return isinstance(x, str)
+
+def vectorp(x):
+    return isinstance(x, (list, tuple))
 
 def SDATA(x):
     assert stringp(x)
@@ -755,7 +759,7 @@ def dispatch(after=None, around=None):
         return wrapper
     return inner
 
-prrepr_ = [lambda x: x if py.isinstance(x, str) else repr(x)]
+prrepr_ = [lambda x: x if py.isinstance(x, str) and x.isprintable() else repr(x)]
 
 def prrepr(x):
     return prrepr_[0](x)
@@ -765,7 +769,7 @@ def inner(s):
         return s[1:-1]
     return s
 
-def prcons(self):
+def prcons(self: Cons):
     if consp(cdr(self)):
         if car(self) == "quote":
             return "'" + prrepr(car(cdr(self)))
@@ -778,7 +782,7 @@ def prcons(self):
         if car(self) == "fn" and prrepr(car(cdr(self))) == "(_)" and null(cdr(cdr(cdr(self)))):
             return "[" + inner(prrepr(car(cdr(cdr(self))))) + "]"
     s = []
-    for tail in self:
+    for tail in self.tails():
         try:
             s += [prrepr(car(tail))]
         except CircularIteration:
@@ -814,16 +818,17 @@ class Freezable(ABC):
     def __init__(self, *, frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
         self.frozen_ = frozen
 
-class HasCar(Generic[A, D], Freezable):
+class HasCar(Generic[A], Freezable):
     # frozen: Optional[Literal[False, True, "car"]]
     car_: Optional[A]
-    # get_car: Optional[Callable[[HasCar[A, D]], A]]
-    # set_car: Optional[Callable[[HasCar[A, D], A], A]]
+    # get_car: Optional[Callable[[HasCar[A]], A]]
+    # set_car: Optional[Callable[[HasCar[A], A], A]]
 
     def __init__(self,
                  car: Optional[A] = unset,
-                 # get_car: Optional[Callable[[HasCar[A, D]], A]] = None,
-                 # set_car: Optional[Callable[[HasCar[A, D], A], A]] = None,
+                 *,
+                 # get_car: Optional[Callable[[HasCar[A]], A]] = None,
+                 # set_car: Optional[Callable[[HasCar[A], A], A]] = None,
                  frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
         super().__init__(frozen=frozen)
         self.car_ = init(self.car_default, car)
@@ -863,6 +868,7 @@ class HasCdr(Generic[A, D], Freezable):
 
     def __init__(self,
                  cdr: Optional[D] = unset,
+                 *,
                  # get_cdr: Optional[Callable[[HasCdr[A, D]], D]] = None,
                  # set_cdr: Optional[Callable[[HasCdr[A, D], A], D]] = None,
                  frozen: Optional[Literal[False, True, "cdr", "cdr"]] = False):
@@ -896,7 +902,7 @@ class HasCdr(Generic[A, D], Freezable):
         self.cdr_ = value
         return value
 
-class FrozenCar(HasCar[A, D]):
+class FrozenCar(HasCar[A]):
     def __init__(self, car: Optional[A] = unset, *, frozen: Optional[Literal[False, True, "cdr", "cdr"]] = "car"):
         assert frozen is True or frozen == "car"
         super().__init__(car, frozen=frozen)
@@ -925,8 +931,66 @@ class FrozenCdr(HasCdr[A, D]):
 #         else:
 #             self.cdr_ = value
 
+
+ConsSelf: TypeAlias = "Cons[A, D]"
+ConsNil: TypeAlias = "Cons[A, None]"
+
+ConsSeqSelf = TypeVar("ConsSeqSelf", bound="ConsSeq[A]")
+
+class ConsBase(HasCar[A]):
+    @classmethod
+    def rest(cls: Type[ConsSeqSelf[A]]) -> Cons[A, ConsSeqSelf[A]]:
+        ...
+
+class Cdr(Protocol[D]):
+    @property
+    @abstractmethod
+    def cdr(self) -> D: ...
+    @cdr.setter
+    def cdr(self, value: D): ...
+    @abstractmethod
+    def get_cdr(self) -> D: ...
+    @abstractmethod
+    def set_cdr(self, value: D) -> D: ...
+
+class SeqCdr(Protocol[A]):
+    @property
+    @abstractmethod
+    def cdr(self) -> Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]: ...
+    @cdr.setter
+    def cdr(self, value: Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]): ...
+    @abstractmethod
+    def get_cdr(self) -> Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]: ...
+    @abstractmethod
+    def set_cdr(self, value: Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]) -> Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]: ...
+
+
+class ConsSeq(HasCar[A], SeqCdr[A]):
+    pass
+
 @functools.total_ordering
-class Cons(HasCar[A, D], HasCdr[A, D]):
+# class Cons(HasCar[A], HasCdr[A, D]):
+# class Cons(ConsSeq[A], HasCdr[A, D]):
+class Cons(HasCar[A], HasCdr[A, D]):
+    # if TYPE_CHECKING:
+    #     @overload
+    #     def __new__(cls: ConsType[A, None], car: Optional[A]) -> Cons[A, Optional[ConsNil]]:
+    #         ...
+    #     def __new__(cls, car: Optional[A], cdr: Optional[D], frozen: Optional[Literal[False, True, "car", "cdr"]] = False):
+    #         ...
+    ConsL: TypeAlias = "Cons[A, Optional[ConsL[A]]]"
+    @classmethod
+    def fromseq(cls: Type[ConsSelf], seq: Iterable[A]) -> ConsSelf[A, Optional[ConsSelf[A]]]:
+        raise NotImplementedError
+
+    @classmethod
+    def fromlst(cls: Type[ConsSelf], seq: Iterable[A]) -> ConsSelf[A, ConsListBase[A]]:
+        raise NotImplementedError
+
+    @classmethod
+    def foo(cls: Cons[int, D]):
+        cls.make()
+
     def __init__(self,
                  car: Optional[A] = unset,
                  cdr: Optional[D] = unset,
@@ -978,7 +1042,7 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
     #     else:
     #         self.cdr_ = value
 
-    def __iter__(self):
+    def for_each_tail_safe(self) -> Generator[Cons[A, D]]:
         tortoise: Optional[Cons[A, D]] = self
         hare: Optional[Cons[A, D]] = self
         while consp(hare):
@@ -992,18 +1056,43 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
             if eq(hare, tortoise):
                 raise CircularIteration()
 
+    def for_each_tail_unsafe(self) -> Generator[Cons[A, D]]:
+        hare: Optional[Cons[A, D]] = self
+        while consp(hare):
+            yield hare
+            hare = cdr(hare)
+
+    def tails(self) -> Generator[Cons[A, D]]:
+        return self.for_each_tail_safe()
+        # return self.for_each_tail_unsafe() # TODO: does this give a speed boost?
+
+    def values(self) -> Generator[A]:
+        for tail in self.tails():
+            yield car(tail)
+
+    def __iter__(self):
+        return iter(self.values())
+
     def list(self, proper=True):
         if null(self):
             return []
         tail = nil
-        return [car(tail := x) for x in self] + ([] if proper or null(cdr(tail)) or not consp(cdr(tail)) else [".", cdr(tail)])
+        return [car(tail := x) for x in self.tails()] + ([] if proper or null(cdr(tail)) or not consp(cdr(tail)) else [".", cdr(tail)])
 
     @overload
-    def at(self, i: Optional[int]) -> Cons[A, D]: ...
+    def at(self, i: Optional[int]) -> Optional[Cons[A, D]]: ...
     @overload
-    def at(self, i: slice) -> List[Cons[A, D]]: ...
+    def at(self, i: slice) -> Optional[List[Cons[A, D]]]: ...
     def at(self, i):
-        return self.list()[i]
+        try:
+            out = self.list()[i]
+        except IndexError:
+            return nil
+        if isinstance(i, slice):
+            out = XCONS(out)
+            if consp(out):
+                out = type(self).new(out)
+        return out
 
     def cut(self, i: Optional[int] = None, j: Optional[int] = None):
         return self.at(slice(i, j))
@@ -1014,7 +1103,7 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
         return prcons(self)
 
     def __getitem__(self, item):
-        return nil if null(self) else ([x for x in self][item])
+        return [x for x in self or []][item]
         # for tail in self:
         #     if item <= 0:
         #         break
@@ -1026,7 +1115,7 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
     def __len__(self):
         n = 0
         if not null(self):
-            for tail in self:
+            for _tail in self.tails():
                 n += 1
         return n
 
@@ -1045,9 +1134,16 @@ class Cons(HasCar[A, D], HasCdr[A, D]):
         else:
             return hash(py.id(self))
 
-ConsListType = TypeVar("ConsListType", bound="ConsList")
 
-class ConsList(Cons[A, Optional[ConsListType]]):
+# if TYPE_CHECKING:
+#     class ConsSeq(Generic[D], Cons[A, ConsSeq[A]], ConsSeq[A]):
+#         pass
+#     # ConsSeq = Cons
+#     ConsSeq = TypeVar("ConsSeq", bound=ConsSeq)
+
+ConsList = TypeVar("ConsList", bound="ConsListBase")
+
+class ConsListBase(Generic[A], Cons[A, Optional[D]]):
     @property
     def cdr(self) -> Optional[ConsList[A]]:
         return super().cdr
@@ -1060,10 +1156,45 @@ class ConsList(Cons[A, Optional[ConsListType]]):
 
 
 if TYPE_CHECKING:
-    ConsList = Union[Cons[A, None], Tuple[A, ...]]
+    ConsList = Union[Cons[A, D], Tuple[A, ...], ConsList[A]]
+
+ConsSequence = Optional[Union[Cons[A, Optional[SeqCdr[A]]], ConsSeq[A], Tuple[A, ...], List[A]]]
+ConsPair = Optional[Union[Cons[A, D], Tuple[A, D], Mapping[A, D]]]
+
+def _CheckSeq():
+    def req(l: ConsSequence[int]):
+        return l.cdr
+    req(['hi'])
+    req([1,2,3])
+    def req(l: ConsSequence[ConsPair[str, T]]) -> T:
+        for cell in l:
+            cell.car
+            return cell.cdr
+
+    req([('hi', True)])
+    req([dict(hi=True)])
+    req([dict([('hi', True)])])
+    req([dict([(42, True)])])
+
 
 def _check():
+    zz: ConsList[int]
+    zz.car
+    zz.cdr
+    cdr(zz)
+
+    l: ConsList[int] = Cons(1, Cons(2, "str"))
+    l: ConsList[int] = Cons(1, Cons(2, Cons(3, None)))
+    l: ConsList[int] = Cons(1, Cons(2, Cons(3, Cons("foo", None))))
+    l: ConsList[int] = Cons("str")
+    cdr(l)
+    car(cdr(l))
+    l: ConsList[int] = Cons(1)
     foo: ConsList[int] = Cons("foo",None)
+    foo: ConsList[int] = Cons(42,None)
+    foo: ConsList[str] = Cons(42)
+    foo: ConsList[int] = Cons(42)
+    ConsList.new(foo)
     foo.set_cdr(21)
     foo.set_cdr("asdf")
     foo.set_cdr(nil)
@@ -1073,6 +1204,11 @@ def _check():
     foo.set_cdr((1,2,3))
     foo.set_cdr(("a",2,3))
     foo.set_cdr(nil)
+
+    foo1 = foo.cdr
+    foo2 = foo1.cdr
+    i: int = foo2.car
+    baz: ConsList[Cons[str, bool]] = Cons("foo")
 
 
 class SupportsHash(Protocol):
@@ -1090,7 +1226,7 @@ class Cell(Cons[SupportsHash, D]):
     # cdr: D
 
     def __init__(self, kvs: Dict[SupportsHash, D], k: SupportsHash, *default: Optional[D],
-                 frozen: Optional[Literal[False, True, "car", "cdr"]] = "car",
+                 frozen: FrozenSpec = "car",
                  # get_car=None, set_car=None, get_cdr=None, set_cdr=None,
                  ):
         if modulep(kvs):
@@ -1113,7 +1249,8 @@ class Cell(Cons[SupportsHash, D]):
         #             assert not consp(kvs)
         #             setattr(kvs, k, v)
         # super().__init__(car=k, get_car=get_car, set_car=set_car, get_cdr=get_cdr, set_cdr=set_cdr)
-        super().__init__(car=(k, kvs), cdr=default, frozen=frozen)
+        # super().__init__(car=(k, kvs), cdr=default, frozen=frozen)
+        super().__init__((k, kvs), default, frozen)
 
     @property
     def key(self) -> Union[str, SupportsHash]:
@@ -1238,10 +1375,7 @@ def consp(x) -> bool:
 
 @dispatch()
 def integerp(x) -> bool:
-    if isinstance(x, bool):
-        return False
-    else:
-        return isinstance(x, int)
+    return py.type(x) is int or (isinstance(x, int) and not isinstance(x, bool))
 
 @dispatch()
 def numberp(x) -> bool:
@@ -1275,21 +1409,51 @@ def modulep(x) -> bool:
 def streamp(x) -> bool:
     return isinstance(x, io.IOBase)
 
+def _check():
+    class TestCar(HasCar[A]):
+        pass
+    zz = TestCar(1)
+    zz.car
+    car(zz)
+
+    foo = Cons(1)
+    foo.rest().rest()
+    foo.car
+    bar: ConsSeq[int] = foo
+    bar.car
+    bar.cdr.cdr.car
+    cdr(bar)
+    def requires_cons(c: ConsSeq[Cons[int, bool]]):
+        ...
+    # requires_cons(bar)
+    requires_cons(((1, True),))
+    requires_cons(((1, "foo"),))
+    requires_cons(Cons(1,2))
+    requires_cons(Cons(Cons(1,2), nil))
+    zz = Cons(Cons(1, nil),2)
+    def foo2(x: ConsSeq[int]):
+        x.car
+        x.cdr
+        x.cdr
+        x.car
+        ...
+    foo2(Cons("hi"))
+
 @overload
 def car(x: None): ...
 @overload
-def car(x: HasCar[A, D]) -> A: ...
+def car(x: HasCar[A]) -> A: ...
 @overload
 def car(x: Tuple[A, D]) -> A: ...
 @overload
 def car(x: Tuple[A, ...]) -> Optional[A]: ...
 @overload
 def car(x: Cons[A, D]) -> A: ...
-@overload
-def car(x: ConsList[A]) -> A: ...
+# @overload
+# def car(x: ConsList[A]) -> A: ...
 
 @dispatch()
-# def car(x: Optional[Union[HasCar[A, D], Cons[A, D], Tuple[A, ...]]]) -> Optional[A]:
+# def car(x: Optional[Union[HasCar[A], Cons[A, D], Tuple[A, ...]]]) -> Optional[A]:
 def car(x):
     return x if null(x) else x.car
 
@@ -1304,9 +1468,16 @@ def cdr(x: Tuple[A, ...]) -> Optional[Tuple[A, ...]]: ...
 @overload
 def cdr(x: Cons[A, D]) -> D: ...
 # @overload
+# def cdr(x: ConsList[A]) -> Optional[ConsList[A]]: ...
+# @overload
 # def cdr(x: ConsList[A]) -> ConsList[A]: ...
 # @overload
 # def cdr(x: Cell[D]) -> D: ...
+# @overload
+# def cdr(x: ConsSeqSelf) -> Optional[ConsSeqSelf]: ...
+
+@overload
+def cdr(x: SeqCdr[A]) -> Optional[Union[List[A], Tuple[A, ...], Cons[A, Optional[SeqCdr[A]]]]]: ...
 
 @dispatch()
 # def cdr(x: Union[Cons[A, D], Tuple[A, D], HasCdr[D]]) -> D:
@@ -1320,6 +1491,27 @@ def _check():
     uu = cdr(it := Cons(1,Cons("ok", 99)))
     it.set_cdr(21)
     it.set_cdr(nil)
+
+    a: SeqCdr[int]
+    cdr(a)
+    def join(l: Cons[Cons[int, bool]]):
+        ...
+    join(list(1,2))
+    join(Cons(Cons(1,True)))
+
+def _check2():
+    zz = cdr(Cons(1,2))
+    uu = cdr(it := Cons(1,Cons("ok", 99)))
+    it.set_cdr(21)
+    it.set_cdr(nil)
+    # def require(x: Optional[ConsSeq[str]]):
+    #     ...
+    Str = TypeVar("Str", bound=str)
+    def require(x: ConsType[Str]):
+        ...
+    require(Cons(1,Cons(2, nil)))
+    require(Cons('a',Cons('b', nil)))
+    require(Cons('a',Cons('b', nil)))
 
 @dispatch()
 def eq(x, y) -> bool:
@@ -1365,4 +1557,8 @@ def _check():
     expect(a4 := Cell(dict(a=99), "a", 420))
     expect(a5 := Cell(dict(a=99), ["bad"], 420))
     expect(a6 := Cell(dict(a=99), object(), 420))
+
+    Cons.fromseq([1,2,3])
+    Cons.fromlst([1,2,3])
+    Cons.make()
 
