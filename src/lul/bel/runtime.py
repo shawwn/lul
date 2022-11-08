@@ -43,29 +43,42 @@ def type(x):
     else:
         return quote("symbol")
 
+@dispatch()
 def xar(x, y):
     assert consp(x)
     x.car = y
     return y
 
+@dispatch()
 def xdr(x, y):
     assert consp(x)
     x.cdr = y
     return y
 
+@xar.register(py.list)
+def xar_list(x: list, y):
+    x[0] = y
+    return y
+
+@xdr.register(py.list)
+def xdr_list(x: list, y):
+    x[:] = [car(x), ".", y]
+    return y
+
 def sym(x):
-    if x == "t":
-        return t
-    elif x == "nil":
-        return nil
-    elif x == "o":
-        return o
-    elif x == "apply":
-        return apply
-    elif x == "unset":
-        return unset
-    else:
-        return x
+    # if x == "t":
+    #     return t
+    # elif x == "nil":
+    #     return nil
+    # elif x == "o":
+    #     return o
+    # elif x == "apply":
+    #     return apply
+    # elif x == "unset":
+    #     return unset
+    # else:
+    #     return x
+    return syms.get(x, x)
 
 def nom(x):
     if x is t:
@@ -87,7 +100,10 @@ def quote(x):
 def apply(f, *args, **kws):
     xs = args[-1]
     if isinstance(xs, Cons):
-        xs = xs.list()
+        # kvs = xs.dict()
+        # kvs.update(kws)
+        # kws = kvs
+        xs = xs.tuple(props=True)
     elif xs is nil:
         xs  = ()
     args = tuple(args[0:-1]) + tuple(xs)
@@ -97,5 +113,18 @@ def apply(f, *args, **kws):
 
 o = "o"
 
+syms = dict(t=t, nil=nil, o=o, apply=apply, unset=unset)
+
 def err(x, *args, **kws):
     raise Error(x, *args, *([kws] if kws else []))
+
+def if_f(*clauses: Callable[[], T], test=unset) -> Callable[[], T]:
+    if test is unset:
+        test = yes
+    while len(clauses) >= 2:
+        cond, cons, *clauses = clauses
+        if test(cond()):
+            return cons
+    if clauses:
+        return clauses[0]
+    return lambda: nil

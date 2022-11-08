@@ -1,0 +1,387 @@
+; (bel '(do (print 1) (print (bel '(load "test.bel" globe) globe)) (print 2)) globe)
+
+(print 'ok)
+;(load "loadup.bel" globe)
+
+;(load "foo.bel" globe)
+(print (bel '(load "loadup.bel" globe) globe))
+
+(print 'hi)
+
+(print (append '(the call/cc returned)
+               (list (ccc (fn (cc)
+                            (set frozen cc)
+                            'a)))))
+
+;(frozen 1)
+
+
+(set froz1)
+(set froz2)
+
+(let x 0
+  (ccc (fn (cc)
+         (set froz1 cc)
+         (set froz2 cc)))
+  (set x (+ x 1))
+  x)
+
+
+
+(set t1 '(a (b (d h)) (c e (f i) g)))
+(set t2 '(1 (2 (3 6 7) 4 5)))
+
+(def dft (tree)
+  (if (null tree) nil
+      (no (pair tree)) (write tree)
+    (do (dft (car tree))
+        (dft (cdr tree)))))
+
+(set saved nil)
+
+(def dft-node (tree)
+  (if (null tree) (restart)
+      (no (pair tree)) tree
+    (ccc (fn (cc)
+           (set saved
+                (cons (fn ()
+                        (cc (dft-node (cdr tree))))
+                      saved))
+           (dft-node (car tree))))))
+
+(def restart ()
+  (if (null saved)
+      'done
+    (let cont (car saved)
+      (set saved (cdr saved))
+      (cont))))
+
+(def dft2 (tree)
+  (set saved nil)
+  (let node (dft-node tree)
+    (if (= node 'done) nil
+      (do (write node)
+          (restart)))))
+
+; (let node1 (dft-node t1) (if (= node1 'done) 'done (list node1 (dft-node t2))))
+; (restart)
+; (restart)
+
+(def dft3 (t1 t2)
+  (let node1 (dft-node t1)
+    (if (= node1 'done) nil
+      (let node2 (dft-node t2)
+        (write (list node1 node2))
+        (restart)))))
+
+
+
+; choose/fail p.293
+
+(set paths nil)
+(set failsym '@)
+
+(def choose (choices)
+  (if (null choices)
+      (fail)
+      (ccc (fn (cc)
+             (set paths
+                  (cons (fn ()
+                          (cc (choose (cdr choices))))
+                        paths))
+             (car choices)))))
+
+(def true-choose (choices)
+  (ccc (fn (cc)
+         (set paths (append paths
+                            (map1 (fn (choice)
+                                    (fn () (cc choice)))
+                                  choices)))
+         (fail))))
+
+(set fail)
+
+(ccc (fn (cc)
+       (set fail
+            (fn ()
+              (if (null paths)
+                  (cc failsym)
+                  (let p1 (car paths)
+                    (set paths (cdr paths))
+                    (p1)))))))
+
+
+(def two-numbers ()
+  (list (choose (list 0 1 2 3 4 5))
+        (choose (list 0 1 2 3 4 5))))
+
+(def parlor-trick (sum)
+  (let nums (two-numbers)
+    (print `(parlor-trick nums ,nums ,sum))
+    (if (= (apply + nums) sum)
+        `(the sum of ,@nums)
+        (fail))))
+
+; (parlor-trick 7)
+; (fail)
+
+(def odd (x) (= (% x 2) 1))
+
+(def choose1 ((o a (list 1 2)) (o b (list 'a 'b)))
+  (let x (choose a)
+    (if (odd x)
+        (let y (choose b)
+          (if (= y 'a)
+              (fail)
+              y))
+        x)))
+
+
+(def descent (n1 n2)
+  (print `(descent ,n1 ,n2))
+  (if (= n1 n2) (list n2)
+      (null (kids n1)) (fail)
+    (cons n1 (descent (choose (kids n1)) n2))))
+
+
+(def kids (n)
+  (case n
+    a '(b c)
+    b '(d e)
+    c '(d f)
+    f '(g)))
+
+
+; (descent 'a 'g)
+; (descent 'a 'd)
+; (fail)
+
+(def find-boxes ()
+  (set paths nil)
+  (let city (choose '(la ny bos))
+    (print)
+    (let store (choose (list 1 2))
+      (let box (choose (list 1 2))
+        (let triple (list city store box)
+          (print triple)
+          (if (coin? triple)
+              (print 'c)
+              (fail)))))))
+
+(def coin? (x)
+  (mem x (list (list 'la 1 2) (list 'ny 1 1) (list 'bos 2 2))))
+
+
+(def mark ()
+  (set paths (cons fail paths)))
+
+(def cut ()
+  (if (null paths) nil
+      (= (car paths) fail)
+      (set paths (cdr paths))
+    (do (set paths (cdr paths))
+        (cut))))
+
+(def find-boxes-2 ()
+  (set paths nil)
+  (let city (choose '(la ny bos))
+    (mark)
+    (print)
+    (let store (choose (list 1 2))
+      (let box (choose (list 1 2))
+        (let triple (list city store box)
+          (print triple)
+          (if (coin? triple)
+              (do (cut) (print 'c))
+              (fail)))))))
+
+
+(def path (node1 node2)
+  (if (null (neighbors node1))
+      (fail)
+      (mem node2 (neighbors node1))
+      (list node2)
+    (let n (true-choose (neighbors node1))
+      (cons n (path n node2)))))
+
+(def neighbors (n)
+  (case n
+    a '(b d)
+    b '(c)
+    c '(a)
+    d '(e)))
+
+(def kids2 (n)
+  (case n
+    a '(b c)
+    b '(d e a)
+    c '(d f)
+    f '(g)))
+
+; (bind neighbors kids2 (path 'a 'f))
+; (fail)
+; (fail)
+
+
+
+; ATN compiler
+
+(def nth (n l)
+  (if (<= n 0) (car l) (nth (- n 1) (cdr l))))
+
+;(def assoc (k l)
+;  (get k l))
+
+(def assoc (key al)
+  (if (atom al)
+       nil
+      (and (consp (car al)) (= (car (car al)) key))
+       (car al)
+      (assoc key (cdr al))))
+
+(def alref (al key) (cadr (assoc key al)))
+
+(mac defnode (name . arcs)
+  `(def ,name (pos regs)
+     (choose (list ,@arcs))))
+
+(mac down (sub next . cmds)
+  `(let (* pos regs) (,sub pos (cons nil regs))
+     (,next pos ,(compile-cmds cmds))))
+
+(mac cat (cat next . cmds)
+  `(if (= (len sent*) pos)
+       (fail)
+       (let * (nth pos sent*)
+         (if (mem ',cat (types *))
+             (,next (+ pos 1) ,(compile-cmds cmds))
+             (fail)))))
+
+(mac jump (next . cmds)
+  `(,next pos ,(compile-cmds cmds)))
+
+(def compile-cmds (cmds)
+  (if (null cmds)
+      'regs
+      `(,@(car cmds) ,(compile-cmds (cdr cmds)))))
+
+(mac up (expr)
+  `(let * (nth pos sent*)
+     (list ,expr pos (cdr regs))))
+
+(mac getr (key (o regs 'regs))
+  `(let result (cdr (assoc ',key (car ,regs)))
+     (if (cdr result) result (car result))))
+
+(mac set-register (key val regs)
+  `(cons (cons (cons ,key ,val) (car ,regs))
+         (cdr ,regs)))
+
+(mac setr (key val regs)
+  `(set-register ',key (list ,val) ,regs))
+
+(mac pushr (key val regs)
+  `(set-register ',key
+                 (cons ,val (cdr (assoc ',key (car ,regs))))
+                 ,regs))
+
+(defnode s
+  (down np s/subj
+    (setr mood 'decl)
+    (setr subj *))
+  (cat v v
+    (setr mood 'imp)
+    (setr subj '(np (pron you)))
+    (setr aux nil)
+    (setr v *)))
+
+
+(mac with-parses (node sent . body)
+  (letu (pos regs)
+    `(do
+       (set sent* ,sent)
+       (set paths nil)
+       (let (parse ,pos ,regs) (,node 0 '(nil))
+         (if (= ,pos (len sent*))
+             (do ,@body (fail))
+             (fail))))))
+
+;(def types (w)
+;  (cdr (assoc w '((spot noun) (runs verb)))))
+
+(def atn ()
+  (with-parses s '(spot runs)
+    (print "Parsing: " parse)))
+
+(def types (word)
+  (if (in word 'do 'does 'did) '(aux v)
+      (in word 'time 'times) '(n v)
+      (in word 'fly 'flies) '(n v)
+      (in word 'like) '(v prep)
+      (in word 'liked 'likes) '(v)
+      (in word 'a 'an 'the) '(det)
+      (in word 'arrow 'arrows) '(n)
+      (in word 'i 'you 'he 'she 'him 'her 'it) '(pron)))
+
+(defnode mods
+  (cat n mods/n
+    (setr mods *)))
+
+(defnode mods/n
+  (cat n mods/n
+    (pushr mods *))
+  (up `(n-group ,(getr mods))))
+
+
+(defnode np
+  (cat det np/det
+    (setr det *))
+  (jump np/det
+    (setr det nil))
+  (cat pron pron
+    (setr n *)))
+
+(defnode pron
+  (up `(np (pronoun ,(getr n)))))
+
+(defnode np/det
+  (down mods np/mods
+    (setr mods *))
+  (jump np/mods
+    (setr mods nil)))
+
+(defnode np/mods
+  (cat n np/n
+    (setr n *)))
+
+(defnode np/n
+  (up `(np (det ,(getr det))
+           (modifiers ,(getr mods))
+           (noun ,(getr n))))
+  (down pp np/pp
+    (setr pp *)))
+
+(defnode np/pp
+  (up `(np (det ,(getr det))
+           (modifiers ,(getr mods))
+           (noun ,(getr n))
+           ,(getr pp))))
+
+
+(defnode pp
+  (cat prep pp/prep
+    (setr prep *)))
+
+(defnode pp/prep
+  (down np pp/np
+    (setr op *)))
+
+(defnode pp/np
+  (up `(pp (prep ,(getr prep))
+           (obj ,(getr op)))))
+
+
+
+(def atn2 ()
+  (with-parses mods '(time arrow)
+    (print "Parsing: " parse)))

@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import contextlib
+import types
 from importlib import reload
 from time import time as seconds
+
+seconds = seconds
 
 from .runtime import *
 import json
 
 # noinspection PyCompatibility
-import __main__ as G
+# import __main__ as G
+# from . import lib as M
+import sys
+M = sys.modules[__name__]
+
+__import__ = py.__import__
 
 
 # def no(x):
@@ -18,7 +26,8 @@ def either(x, y):
     return x if ok(x) else y
 
 def atom(x):
-    return no(id(type(x), quote("pair")))
+    # return no(id(type(x), quote("pair")))
+    return not consp(x)
 
 # def all(f, xs):
 #     if no(xs):
@@ -28,14 +37,21 @@ def atom(x):
 #     else:
 #         return all(f, cdr(xs))
 
+# def all(f, xs):
+#     while True:
+#         if no(xs):
+#             return t
+#         elif no(f(car(xs))):
+#             return nil
+#         else:
+#             xs = cdr(xs)
+
 def all(f, xs):
-    while True:
-        if no(xs):
-            return t
-        elif no(f(car(xs))):
+    while xs:
+        if not f(car(xs)):
             return nil
-        else:
-            xs = cdr(xs)
+        xs = cdr(xs)
+    return t
 
 # def some(f, xs):
 #     if no(xs):
@@ -46,21 +62,32 @@ def all(f, xs):
 #         return xs
 
 def some(f, xs):
-    while True:
-        if no(xs):
-            return nil
-        elif no(f(car(xs))):
-            xs = cdr(xs)
-        else:
+    # while True:
+    #     if no(xs):
+    #         return nil
+    #     elif no(f(car(xs))):
+    #         xs = cdr(xs)
+    #     else:
+    #         return xs
+    while xs:
+        if f(car(xs)):
             return xs
+        xs = cdr(xs)
+
+
+# def reduce(f, xs):
+#     if no(cdr(xs)):
+#         return car(xs)
+#     else:
+#         return f(car(xs), reduce(f, cdr(xs)))
 
 def reduce(f, xs):
-    if no(cdr(xs)):
-        return car(xs)
-    else:
-        return f(car(xs), reduce(f, cdr(xs)))
+    x, ys = car(xs), cdr(xs)
+    return f(x, reduce(f, ys)) if ys else x
 
-def cons(*args):
+def cons(*args, **kws):
+    if kws:
+        args = tuple((*args, kws))
     return reduce(join, args)
 
 # (def append args
@@ -69,16 +96,31 @@ def cons(*args):
 #                       (cons (car (car args))
 #                             (apply append (cdr (car args))
 #                                           (cdr args)))))
-def append(*args):
-    if no(cdr(args)):
-        return car(args)
-    elif no(car(args)):
-        return apply(append, cdr(args))
-    else:
-        return cons(car(car(args)),
-                    apply(append,
-                          cdr(car(args)),
-                          cdr(args)))
+# def append(*args):
+#     if no(cdr(args)):
+#         return car(args)
+#     elif no(car(args)):
+#         return apply(append, cdr(args))
+#     else:
+#         return cons(car(car(args)),
+#                     apply(append,
+#                           cdr(car(args)),
+#                           cdr(args)))
+
+def append(*args, **kws):
+    # if kws:
+    #     args, kws = (*args, kws), {}
+    if it := py.tuple(py.filter(ok, args)):
+        x, *ys = it
+        # x, ys = car(args), cdr(args)
+        if dictp(x):
+            return apply(append, ys, **x, **kws)
+        if ys:
+            return cons(car(x), apply(append, cdr(x), ys, **kws))
+        return apply(cons, x, **kws) if kws else x
+    return kws if kws else nil
+
+
 
 # (def snoc args
 #   (append (car args) (cdr args)))
@@ -87,9 +129,12 @@ def snoc(*args):
 
 # (def list args
 #   (append args nil))
-def list(*args):
-    # return append(args, nil)
+def list(*args, **kws):
+    if kws:
+        return append(args, **kws)
+    # return append(args, kws or nil)
     return XCONS(args)
+    # return cons(it, kws) if kws else it
 
 # (def map (f . ls)
 #   (if (no ls)       nil
@@ -98,17 +143,32 @@ def list(*args):
 #                           (map f (cdr (car ls))))
 #                     (cons (apply f (map car ls))
 #                           (apply map f (map cdr ls)))))
+# def map(f, *ls):
+#     if no(ls):
+#         return nil
+#     elif yes(some(no, ls)):
+#         return nil
+#     elif no(cdr(ls)):
+#         return cons(f(car(car(ls))),
+#                     map(f, cdr(car(ls))))
+#     else:
+#         return cons(apply(f, map(car, ls)),
+#                     apply(map, f, map(cdr, ls)))
 def map(f, *ls):
-    if no(ls):
+    if not ls or py.any(null(x) for x in ls):
         return nil
-    elif yes(some(no, ls)):
-        return nil
-    elif no(cdr(ls)):
-        return cons(f(car(car(ls))),
-                    map(f, cdr(car(ls))))
-    else:
-        return cons(apply(f, map(car, ls)),
-                    apply(map, f, map(cdr, ls)))
+    elif ls[1:]:
+        ls = [XCONS(py.tuple(l)) for l in ls]
+        return cons(apply(f, (car(l) for l in ls)),
+                    apply(map, f, (cdr(l) for l in ls)))
+    elif l := car(ls):
+        if consp(l):
+            return cons(f(car(l)),
+                        map(f, cdr(l)))
+        elif dictp(l):
+            return {k: x for k, v in l.items() if ok(x := f(v))}
+        else:
+            return XCONS(py.tuple(py.map(f, l)))
 
 def macro_(f):
     return list(quote("lit"), quote("mac"), f)
@@ -135,7 +195,7 @@ def fn(parms, *body):
                     list(quote("quote"), list(quote("do"), *body)))
 
 # (set vmark (join))
-vmark = join("%vmark")
+vmark = globals().get("vmark", join("%vmark"))
 
 # (def uvar ()
 #   (list vmark))
@@ -234,19 +294,43 @@ def and_f(*args):
                 return nil
         return x
 
+# (def pairwise (f xs)
+#   (or (no (cdr xs))
+#       (and (f (car xs) (cadr xs))
+#            (pairwise f (cdr xs)))))
+# def pairwise(f, xs):
+#     if ys := cdr(xs):
+#         return f(car(xs), car(ys)) and pairwise(f, ys)
+#     else:
+#         return t
+def pairwise(f, xs):
+    while ys := cdr(xs):
+        if not f(car(xs), car(ys)):
+            return nil
+        xs = ys
+    return t
+
 # (def = args
 #   (if (no (cdr args))  t
 #       (some atom args) (all [id _ (car args)] (cdr args))
 #                        (and (apply = (map car args))
 #                             (apply = (map cdr args)))))
+# def equal(*args):
+#     if no(cdr(args)):
+#         return t
+#     elif no(some(atom, args)):
+#         return and_(apply(equal, map(car, args)),
+#                     apply(equal, map(cdr, args)))
+#     else:
+#         return all(lambda _: id(_, car(args)), cdr(args))
 def equal(*args):
-    if no(cdr(args)):
-        return t
-    elif no(some(atom, args)):
-        return and_(apply(equal, map(car, args)),
-                    apply(equal, map(cdr, args)))
-    else:
-        return all(lambda _: id(_, car(args)), cdr(args))
+    return pairwise(eqv, args)
+
+globals()["="] = equal
+globals()["<"] = lambda *args: pairwise(lambda x, y: x < y, args)
+globals()[">"] = lambda *args: pairwise(lambda x, y: x > y, args)
+globals()["<="] = lambda *args: pairwise(lambda x, y: x <= y, args)
+globals()[">="] = lambda *args: pairwise(lambda x, y: x >= y, args)
 
 # (def symbol (x) (= (type x) 'symbol))
 def symbol(x):
@@ -303,7 +387,10 @@ def mem_Mapping(x, ys: Mapping, f=unset):
 # (def in (x . ys)
 #   (mem x ys))
 def in_(x, *ys):
-    return mem(x, ys)
+    # return mem(x, ys, id)
+    # return {y: t for y in ys}.get(x)
+    return x in py.set(ys)
+globals()["in"] = in_
 
 # (def cadr  (x) (car (cdr x)))
 def cadr(x):
@@ -376,11 +463,11 @@ def find(f, xs):
 def begins(xs, pat, f=unset):
     if f is unset:
         f = equal
-    if no(pat):
-        return t
+    if null(pat):
+        return list(xs)
     elif atom(xs):
         return nil
-    elif yes(f(car(xs), car(pat))):
+    elif f(car(xs), car(pat)):
         return begins(cdr(xs), cdr(pat), f)
     else:
         return nil
@@ -437,6 +524,10 @@ def keep(f, xs):
 def keep_Mapping(f, xs: Mapping):
     return {k: v for k, v in xs.items() if yes(f(Cell(xs, k)))}
 
+@keep.register(types.GeneratorType)
+def keep_Generator(f, xs: types.GeneratorType):
+    return (x for x in xs if yes(f(x)))
+
 # (def rem (x ys (o f =))
 #   (keep [no (f _ x)] ys))
 def rem(x, ys, f=unset):
@@ -454,11 +545,12 @@ def get(k, kvs, f=unset):
         return kvs
     if isinstance(kvs, Cons):
         # return find(lambda _: f(car(_), k), kvs)
-        for tail in kvs:
+        tail = nil
+        for tail in kvs.tails():
             x = car(tail)
             if f(car(x), k):
                 return x
-        if dictp(it := cdr(kvs[-1])):
+        if dictp(it := cdr(tail)):
             kvs = it
         else:
             return nil
@@ -474,7 +566,7 @@ def get(k, kvs, f=unset):
 @get.register(std.Mapping)
 def get_Mapping(k, kvs: Mapping, f=unset):
     if f in [unset, id]:
-        if k in kvs:
+        if kvs.get(k, unset) is not unset:
             return Cell(kvs, k)
     else:
         return get(k, XCONS(kvs), f)
@@ -486,8 +578,8 @@ def get_Mapping(k, kvs: Mapping, f=unset):
 def put(k, v, kvs, f=unset):
     if f is unset:
         f = equal
-    return cons(cons(k, v),
-                rem(k, kvs, lambda x, y: f(car(x), y)))
+    it = rem(k, kvs, lambda x, y: f(car(x), y))
+    return it if unboundp(v) else cons(cons(k, v), it)
 
 @put.register(std.Mapping)
 def put_Mapping(k, v, kvs: Mapping, f=unset):
@@ -502,11 +594,17 @@ def put_Mapping(k, v, kvs: Mapping, f=unset):
 #   (if (no xs)
 #       nil
 #       (snoc (rev (cdr xs)) (car xs))))
+@dispatch()
 def rev(xs):
-    if no(xs):
-        return nil
-    else:
+    if xs:
         return snoc(rev(cdr(xs)), car(xs))
+    else:
+        return nil
+
+@rev.register(py.tuple)
+@rev.register(py.list)
+def rev_seq(xs):
+    return xs[::-1]
 
 # (def snap (xs ys (o acc))
 #   (if (no xs)
@@ -558,8 +656,7 @@ def eif(var, expr=unset, fail=unset, ok=unset):
                 list(quote("let"), w, list(quote("ccc"), list(quote("fn"), list(c),
                                                               list(quote("dyn"), quote("err"),
                                                                    list(quote("fn"), list(quote("_")),
-                                                                        list(c),
-                                                                        list(quote("cons"), v, quote("_"))),
+                                                                        list(c, list(quote("cons"), v, quote("_")))),
                                                                    expr))),
                      list(quote("if"), list(quote("caris"), w, v, quote("id")),
                           list(quote("let"), var, list(quote("cdr"), w), fail),
@@ -607,7 +704,7 @@ def literal(e):
         return t
     elif in_(type(e), quote("char"), quote("stream")):
         return t
-    elif caris(e, quote("lit")):
+    elif caris(e, quote("lit"), id):
         return t
     elif number(e):
         return t
@@ -617,20 +714,97 @@ def literal(e):
         return t
     elif string_literal_p(e):
         return t
+    elif id_literal_p(e):
+        return t
+    elif keywordp(e):
+        return t
+    # else:
+    #     return string(e)
     else:
-        return string(e)
+        return nil
 
 def string_literal_p(e):
     if not isinstance(e, str):
         return False
-    if len(e) <= 0:
-        return False
-    return e[0].isdigit() or (e.startswith('"') and e.endswith('"'))
+    return (e.startswith('"') and e.endswith('"')) or e[0:1].isdigit()
 
-def evliteral(e):
-    if string_literal_p(e) and reader.read_from_string(e, more=object())[0] == e:
-        return json.loads(e)
-    return e
+def id_literal_p(e):
+    if not isinstance(e, str):
+        return False
+    return e.startswith('|') and e.endswith('|')
+
+def copycode(c, filename=unbound(), firstlineno=unbound()):
+    filename = c.co_filename if unboundp(filename) else filename
+    firstlineno = c.co_firstlineno if unboundp(firstlineno) else firstlineno
+    return types.CodeType(c.co_argcount, c.co_posonlyargcount, c.co_kwonlyargcount,
+        c.co_nlocals, c.co_stacksize, c.co_flags,
+        c.co_code, c.co_consts, c.co_names,
+        c.co_varnames, filename, c.co_name,
+        firstlineno, c.co_lnotab,
+        cellvars=c.co_cellvars,
+        freevars=c.co_freevars)
+
+class Bindings(std.Mapping):
+    def __init__(self, a, s, r, m):
+        self.a = a
+        self.s = s
+        self.r = r
+        self.m = m
+
+    @property
+    def g(self):
+        return cadr(self.m)
+
+    def lookup(self, e):
+        return lookup(e, self.a, self.s, self.g)
+
+    def __getitem__(self, e):
+        if cell := self.lookup(e):
+            return cdr(cell)
+        raise KeyError(e)
+
+    def __getattr__(self, e):
+        if cell := self.lookup(e):
+            return cdr(cell)
+        raise AttributeError(e)
+
+    def __setitem__(self, e, value):
+        if cell := self.lookup(e):
+            xdr(cell, value)
+        else:
+            xset(e, value, self.g)
+
+    def __len__(self):
+        raise NotImplementedError("Bindings.__len__")
+
+    def __iter__(self):
+        raise NotImplementedError("Bindings.__iter__")
+
+
+def evliteral(e, a, s, r, m):
+    if string_literal_p(e):
+        e = json.loads(e)
+    elif id_literal_p(e):
+        source = e[1:-1]
+        local = Bindings(a, s, r, m)
+        filename = local.get("__file__", "<string>")
+        line = local.get("__line__", 1)
+        try:
+            co = compile(source, filename, "eval")
+            go = eval
+        except SyntaxError:
+            co = compile(source, filename, "exec")
+            go = exec
+        # co = copycode(co, filename, line)
+        # builtin = collections.ChainMap()
+        # builtin.maps = [M.__dict__, py.__dict__]
+        builtin = local
+        global_ = dict(__builtins__=builtin)
+        try:
+            e = go(co, global_, local)
+        except SystemError: # this happens when running |import foo|
+            e = go(co, local.g, local)
+    return mev(s, cons(e, r), m)
 
 # (def variable (e)
 #   (if (atom e)
@@ -655,7 +829,8 @@ def bel(e, g=unset, a=unset):
     if a is unset:
         # a = nil
         # a = XCONS(G.__dict__)
-        a = G.__dict__
+        # a = G.__dict__
+        a = nil
     if g is unset:
         # g = globe()
         # g = nil
@@ -663,9 +838,16 @@ def bel(e, g=unset, a=unset):
         # g = XCONS(globals())
         # g = append(XCONS(G.__dict__), XCONS(globals()))
         g = globals()
-    return ev(list(list(e, a)),
-              nil,
-              list(nil, g))
+    reset = mev_tail.set(False)
+    try:
+        return ev(list(list(e, a)),
+                  nil,
+                  list(nil, g))
+    except JumpToMev:
+        print("TKTK")
+        breakpoint()
+    finally:
+        mev_tail.reset(reset)
 
 # (def mev (s r (p g))
 #   (if (no s)
@@ -689,9 +871,10 @@ def mev_(s, r, pg):
                      snoc(p, list(s, r)),
                      g)
 
-mev_tail = CV.ContextVar[bool]("mev_tail", default=False)
+if "mev_tail" not in globals():
+    mev_tail = CV.ContextVar[bool]("mev_tail", default=False)
 
-class JumpToMev(Exception):
+class JumpToMev(BaseException):
     def __init__(self, s, r, pg):
         self.s = s
         self.r = r
@@ -728,7 +911,7 @@ def sched(sr_p, g):
 def ev(ea_s, r, m):
     e, a, s = car(car(ea_s)), cadr(car(ea_s)), cdr(ea_s)
     if yes(literal(e)):
-        return mev(s, cons(evliteral(e), r), m)
+        return evliteral(e, a, s, r, m)
     elif yes(variable(e)):
         return vref(e, a, s, r, m)
     elif no(proper(e)):
@@ -757,39 +940,48 @@ def vref(v, a, s, r, m):
     if inwhere(s):
         if yes(it := or_f(lambda: lookup(v, a, s, g),
                           lambda: and_f(lambda: car(inwhere(s)),
-                                        lambda: gset(v, nil, g)))):
-            # lambda: [cell := cons(v, nil),
-            #          xdr(g, cons(cell, cdr(g))),
-            #          cell][-1]))):
-            #     lambda cell: ([xdr(g, cons(cell, cdr(g)))] and cell))
-            # # (lambda cell: (lambda a, b: b)(xdr(g, cons(cell, cdr(g))), cell))(
-            # #     cons(v, nil))
-            # ))):
+                                        lambda: xset(v, unset, g)))):
             return mev(cdr(s), cons(list(it, quote("d")), r), m)
         else:
-            if yes(it := lookup(v, a, s, g)):
-                return mev(s, cons(cdr(it), r), m)
-            else:
-                return sigerr(list(quote("unboundb"), v), s, r, m)
+            return sigerr(list(quote("unbound"), v), s, r, m)
     else:
         if yes(it := lookup(v, a, s, g)):
             return mev(s, cons(cdr(it), r), m)
         else:
             return sigerr(list(quote("unboundb"), v), s, r, m)
 
-def gset(k, v, kvs):
+def assign(where, v):
+    assert not null(where)
+    cell, loc = car(where), cadr(where)
+    return case_f(loc,
+                  quote("a"), lambda: [xar(cell, v)] and nil,
+                  quote("d"), lambda: [xdr(cell, v)] and nil,
+                  lambda: err(quote("cannot-assign"), loc, cell))
+
+def belglobals():
+    return globals()
+
+def xset_around(func, k, v, kvs=unset, **kws):
+    if kvs is unset:
+        kvs = belglobals()
+    return func(k, v, kvs, **kws)
+
+# @dispatch(2, around=xset_around)
+@dispatch(2)
+def xset(k, v, kvs):
     assert not null(kvs)
-    if consp(kvs):
-        cell = cons(k, v)
-        xdr(kvs, cons(cell, cdr(kvs)))
-    else:
-        cell = Cell(kvs, k, nil)
-        xdr(cell, v)
-    #return list(cell, quote("d"))
+    cell = Cell(kvs, k, nil)
+    xdr(cell, v)
+    return cell
+
+@xset.register(Cons)
+def xset_Cons(k, v, kvs: Cons):
+    cell = cons(k, v)
+    xdr(kvs, cons(cell, cdr(kvs)))
     return cell
 
 # (set smark (join))
-smark = join("%smark")
+smark = globals().get("smark", join("%smark"))
 
 # (def inwhere (s)
 #   (let e (car (car s))
@@ -807,12 +999,18 @@ def inwhere(s):
 #       (case e
 #         scope (cons e a)
 #         globe (cons e g))))
-def lookup(e, a, s, g):
+def lookup(e, a, s, g, new=unset):
+    if new is unset:
+        new = yes(car(inwhere(s)))
     return or_f(lambda: binding(e, s),
                 lambda: get(e, a, id),
                 lambda: get(e, g, id),
+                *(() if new else
+                  (lambda: get(e, globals(), id),
+                   lambda: get(e, py.__dict__, id))),
                 lambda: (cons(e, a) if id(e, quote("scope")) else
                          cons(e, g) if id(e, quote("globe")) else
+                         cons(e, s) if id(e, quote("stack")) else
                          nil))
 
 # (def binding (v s)
@@ -821,10 +1019,45 @@ def lookup(e, a, s, g):
 #                         (map car s)))
 #        id))
 def binding(v, s):
-    return get(v,
-               map(caddr, keep(lambda _: begins(_, list(smark, quote("bind")), id),
-                               map(car, s))),
-               id)
+    # return get(v, bindings(s), id)
+    # return nil
+    # if s:
+    #     for e_a in s.list():
+    #         e = car(e_a)
+    #         # if id(car(e), smark):
+    #         if caris(e, smark):
+    #             it = cdr(e)
+    #             if id(car(it), quote("bind")):
+    #                 it = cdr(it)
+    #                 slot = car(it)
+    #                 if id(v, car(slot)):
+    #                     return slot
+    for slot in bindings(s):
+        if id(v, car(slot)):
+            return slot
+
+# # @functools.lru_cache(maxsize=100)
+# def bindings(s):
+#     # return nil
+#     # return map(caddr, keep(lambda _: begins(_, list(smark, quote("bind")), id),
+#     return map(caddr, keep(lambda _: begins(_, (smark, quote("bind")), id),
+#                            map(car, s)))
+#                            # map(car, XCONS(s))))
+#     # return map(lambda _: caddr(car(_)),
+#     #            keep(lambda _: begins(car(_), list(smark, quote("bind")), id),
+#     #                 s))
+
+def bindings(s):
+    if it := XCONS(s):
+        for e_a in it.list():
+            e = car(e_a)
+            # if id(car(e), smark):
+            if caris(e, smark):
+                it = cdr(e)
+                if id(car(it), quote("bind")):
+                    it = cdr(it)
+                    slot = car(it)
+                    yield slot
 
 # (def sigerr (msg s r m)
 #   (aif (binding 'err s)
@@ -833,7 +1066,7 @@ def binding(v, s):
 def sigerr(msg, s, r, m):
     # print("sigerr", msg)
     if yes(it := binding(quote("err"), s)):
-        return applyf(cdr(it), list(msg), nil, s, r, m)
+        return applyf(cdr(it), list(msg), {}, nil, s, r, m)
     else:
         if isinstance(msg, Exception):
             raise msg
@@ -842,8 +1075,8 @@ def sigerr(msg, s, r, m):
 
 # (mac fu args
 #   `(list (list smark 'fut (fn ,@args)) nil))
-def fu(f):
-    return list(list(smark, quote("fut"), f), nil)
+def fu(f, *more):
+    return list(list(smark, quote("fut"), f, *more), nil)
 
 # (def evmark (e a s r m)
 #   (case (car e)
@@ -870,7 +1103,7 @@ def evmark(e, a, s, r, m):
         lambda: sigerr(quote("unknown-mark"), s, r, m))
 
 # (set forms (list (cons smark evmark)))
-forms = list(cons(smark, evmark))
+forms = globals().get("forms", list(cons(smark, evmark)))
 
 # (mac form (name parms . body)
 #   `(set forms (put ',name ,(formfn parms body) forms)))
@@ -889,10 +1122,11 @@ forms = list(cons(smark, evmark))
 def form_(name):
     def formsetter(f):
         global forms
-        forms = put(name, f, forms)
+        forms = put(name, f, forms, id)
         return f
     return formsetter
 
+form_(smark)(evmark)
 
 # (def parameters (p)
 #   (if (no p)           nil
@@ -926,7 +1160,8 @@ def if_(es, a, s, r, m):
         return mev(s, cons(nil, r), m)
     else:
         return mev(cons(list(car(es), a),
-                        cons(fu(lambda s, r, m: if2(cdr(es), a, s, r, m)),
+                        cons(fu(lambda s, r, m: if2(cdr(es), a, s, r, m),
+                                list(if_, es)),
                              s) if yes(cdr(es)) else s),
                    r,
                    m)
@@ -945,6 +1180,36 @@ def if2(es, a, s, r, m):
                     s),
                cdr(r),
                m)
+
+@form_("do")
+def do_form(es, a, s, r, m):
+    # print("do_form", es, len(s or []), len(r or []))
+    # map(print, map(car, s))
+    e, es = car(es), cdr(es)
+    if not es:
+        return mev(cons(list(e, a), s), r, m)
+    return mev(cons(list(e, a),
+                    # fu((lambda s, r, m:
+                    #     do_form(es, a, s, cdr(r), m))),
+                    fu((lambda s, r, m:
+                        mev(s, cdr(r), m))),
+                    list(cons(quote("do"), es), a),
+                    s),
+               r,
+               m)
+
+@form_("let")
+def let_form(es, a, s, r, m):
+    var, es = car(es), cdr(es)
+    val, es = car(es), cdr(es)
+    body = cons(quote("do"), es) if cdr(es) else car(es)
+    return mev(cons(list(val, a),
+                    fu(lambda s, r, m: applyclo(var, car(r), a, body, s, cdr(r), m)),
+                    s),
+               r,
+               m)
+
+
 
 # (form where ((e (o new)) a s r m)
 #   (mev (cons (list e a)
@@ -1053,7 +1318,8 @@ def thread(es, a, s, r, pg):
 #        m))
 def evcall(e, a, s, r, m):
     return mev(cons(list(car(e), a),
-                    fu(lambda s, r, m: evcall2(cdr(e), a, s, r, m)),
+                    fu(lambda s, r, m: evcall2(cdr(e), a, s, r, m),
+                       list(evcall, e)),
                     s),
                r,
                m)
@@ -1071,15 +1337,34 @@ def evcall(e, a, s, r, m):
 def evcall2(es, a, s, op_r, m):
     op, r = car(op_r), cdr(op_r)
     if isa(quote("mac"))(op):
-        return applym(op, es, a, s, r, m)
+        kws = es.dict() if es else {}
+        es = XCONS(es.tuple()) if es else nil
+        return applym(op, es, kws, a, s, r, m)
     else:
-        @fu
+        if some(keywordp, es):
+            kws = es.dict()
+            es = XCONS(es.tuple())
+            ks = XCONS(k for k in kws.keys())
+            vs = XCONS(v for v in kws.values())
+            es = append(es, vs)
+        else:
+            kws = {}
+            ks = nil
         def f(s, r, m):
             args_r2 = snap(es, r)
             args, r2 = car(args_r2), cadr(args_r2)
-            return applyf(op, rev(args), a, s, r2, m)
+            if ks:
+                vs_args = snap(ks, args)
+                vs, args = car(vs_args), cadr(vs_args)
+                xs = map(lambda x, y: (x, y), ks, rev(vs))
+                # print("vs", xs, ks, rev(vs), xs, args)
+                kws1 = py.dict(xs.list())
+                # print("kws1", kws1)
+            else:
+                kws1 = kws
+            return applyf(op, rev(args), kws1, a, s, r2, m)
         return mev(append(map(lambda _: list(_, a), es),
-                          cons(f,
+                          cons(fu(f, cons(op, es)),
                                s)),
                    r,
                    m)
@@ -1095,9 +1380,11 @@ def evcall2(es, a, s, op_r, m):
 #                 s)
 #           r
 #           m))
-def applym(mac, args, a, s, r, m):
+def applym(mac, args, kws: dict, a, s, r, m):
+    # print("applym", [*args], kws)
     return applyf(caddr(mac),
                   args,
+                  kws,
                   a,
                   cons(fu(lambda s, r, m: mev(cons(list(car(r), a), s),
                                               cdr(r),
@@ -1112,21 +1399,13 @@ def applym(mac, args, a, s, r, m):
 #                          (applylit f args a s r m)
 #                          (sigerr 'bad-lit s r m))
 #                      (sigerr 'cannot-apply s r m)))
-def applyf(f, args, a, s, r, m):
+def applyf(f, args, kws: dict, a, s, r, m):
     if equal(f, apply):
-        return applyf(car(args), reduce(join, cdr(args)), a, s, r, m)
-    elif caris(f, quote("lit")):
-        if proper(f):
-            return applylit(f, args, a, s, r, m)
-        else:
-            return sigerr(quote("bad-lit"), s, r, m)
-    elif callable(f):
-        try:
-            return mev(s, cons(apply(f, args), r), m)
-        except Exception as v:
-            return sigerr(v, s, r, m)
+        # if dictp(it := cdr(args)):
+        #     kws = {**kws, it}
+        return applyf(car(args), reduce(join, cdr(args)), kws, a, s, r, m)
     else:
-        return sigerr(quote("cannot-apply"), s, r, m)
+        return applylit(f, args, kws, a, s, r, m)
 
 # (def applylit (f args a s r m)
 #   (aif (and (inwhere s) (find [(car _) f] locfns))
@@ -1147,12 +1426,21 @@ def applyf(f, args, a, s, r, m):
 #                      (let e ((cdr it) f (map [list 'quote _] args))
 #                        (mev (cons (list e a) s) r m))
 #                      (sigerr 'unapplyable s r m))))))
-def applylit(f, args, a, s, r, m):
+def applylit(f, args, kws: dict, a, s, r, m):
     if yes(inwhere(s)) and yes(it := find(lambda _: car(_)(f), locfns)):
         return cadr(it)(f, args, a, s, r, m)
+    elif callable(f) and not consp(f):
+        try:
+            return mev(s, cons(apply(f, args, **kws), r), m)
+        except RecursionError:
+            raise
+        except Exception as v:
+            return sigerr(v, s, r, m)
     else:
-        _ = cdr(f)
-        tag, rest = car(_), cdr(_)
+        if caris(f, quote("lit")):
+            tag, rest = cadr(f), cddr(f)
+        else:
+            tag, rest = type(f), f
         def do_clo():
             env, parms, body, extra = car(rest), cadr(rest), caddr(rest), cdr(cddr(rest))
             if yes(okenv(env)) and yes(okparms(parms)):
@@ -1175,18 +1463,18 @@ def applylit(f, args, a, s, r, m):
             tag,
             quote("prim"), (lambda: applyprim(car(rest), args, s, r, m)),
             quote("clo"), do_clo,
-            quote("mac"), (lambda: applym(f, map(lambda _: list(quote("quote"), _), args), a, s, r, m)),
+            quote("mac"), (lambda: applym(f, map(lambda _: list(quote("quote"), _), args), kws, a, s, r, m)),
             quote("cont"), do_cont,
             do_virfns)
 
 # (set virfns nil)
-virfns = nil
+virfns = globals().get("virfns", nil)
 
 # (mac vir (tag . rest)
 #   `(set virfns (put ',tag (fn ,@rest) virfns)))
 
 # (set locfns nil)
-locfns = nil
+locfns = globals().get("locfns", nil)
 
 # (mac loc (test . rest)
 #   `(set locfns (cons (list ,test (fn ,@rest)) locfns)))
@@ -1568,26 +1856,68 @@ def atomic(*body):
 @macro_
 def set(*args):
     def f(x):
-        if len(x) <= 1:
-            p, e = car(x), t
-        else:
-            p, e = car(x), cadr(x)
-        v = uvar()
-        return list(quote("atomic"), list(quote("let"), v, e,
-                                          list(quote("let"), list(quote("cell"), quote("loc")), list(quote("where"), p, quote("t")),
-                                               list(list(quote("case"), quote("loc"), quote("a"), quote("xar"), quote("d"), quote("xdr")), quote("cell"), v))))
+        # x = x.list()
+        # if py.len(x) <= 1:
+        #     p, e = car(x), t
+        # else:
+        #     p, e = car(x), cadr(x)
+        p, e = x[0], (x[1:] or [t])[0]
+        # v = uvar()
+        # return list(quote("atomic"), list(quote("let"), v, e,
+        #                                   list(quote("let"), list(quote("cell"), quote("loc")), list(quote("where"), p, quote("t")),
+        #                                        list(list(quote("case"), quote("loc"), quote("a"), quote("xar"), quote("d"), quote("xdr")), quote("cell"), v))))
+        return list(quote("assign"), list(quote("where"), p, quote("t")), e)
     return cons(quote("do"), map(f, hug(args)))
 
+def opget(kvs, k):
+    return cdr(get(k, kvs))
 
+def opneg(x):
+    return -x
 
-globals()["."] = lambda *args: cdr(get(*args))
-globals()["+"] = lambda *args: either(reduce(lambda a, b: a + b, args), 0)
-globals()["-"] = lambda *args: -args[0] if py.len(args) == 1 else either(reduce(lambda b, a: a - b, rev(args)), 0)
-globals()["*"] = lambda *args: either(reduce(lambda a, b: a * b, args), 1)
-globals()["/"] = lambda *args: either(reduce(lambda b, a: a / b, rev(args)), 1)
-globals()["//"] = lambda *args: either(reduce(lambda b, a: a // b, rev(args)), 1)
-globals()["**"] = lambda *args: either(reduce(lambda b, a: a ** b, rev(args)), 1)
-globals()["%"] = lambda *args: either(reduce(lambda b, a: a % b, rev(args)), 0)
+def opadd(x, y):
+    return x + y
+
+def opsub(x, y):
+    return x - y
+
+def opmul(x, y):
+    return x * y
+
+def opdiv(x, y):
+    return x / y
+
+def opidiv(x, y):
+    return x // y
+
+def oppow(x, y):
+    return x ** y
+
+def opmod(x, y):
+    return x % y
+
+# globals()["."] = lambda *args: cdr(get(*args))
+# globals()["+"] = lambda *args: either(reduce(lambda a, b: a + b, args), 0)
+# globals()["-"] = lambda x=0, *args: -x if not args else either(reduce(lambda b, a: a - b, rev(cons(x, args))), 0)
+# globals()["*"] = lambda *args: either(reduce(lambda a, b: a * b, args), 1)
+# globals()["/"] = lambda *args: either(reduce(lambda b, a: a / b, rev(args)), 1)
+# globals()["//"] = lambda *args: either(reduce(lambda b, a: a // b, rev(args)), 1)
+# globals()["**"] = lambda *args: either(reduce(lambda b, a: a ** b, rev(args)), 1)
+# globals()["%"] = lambda *args: either(reduce(lambda b, a: a % b, rev(args)), 0)
+
+def fold(f, x, *ys):
+    for y in ys:
+        x = f(x, y)
+    return x
+
+globals()["."] = lambda self, *keys: fold(opget, self, *keys)
+globals()["+"] = lambda x=0, *args: fold(opadd, x, *args)
+globals()["-"] = lambda x=0, *args: fold(opsub, x, *args) if args else opneg(x)
+globals()["*"] = lambda x=1, *args: fold(opmul, x, *args)
+globals()["/"] = lambda x=1, *args: fold(opdiv, x, *args)
+globals()["//"] = lambda x=1, *args: fold(opidiv, x, *args)
+globals()["**"] = lambda x=1, *args: fold(oppow, x, *args)
+globals()["%"] = lambda x=0, *args: fold(opmod, x, *args)
 
 # import sys
 # sys.setrecursionlimit(10_000)
@@ -1598,21 +1928,37 @@ globals()["%"] = lambda *args: either(reduce(lambda b, a: a % b, rev(args)), 0)
 # 'str' object has no attribute 'car'
 # 'hello'
 
-def vec2list(v):
-    if py.isinstance(v, py.list):
-        if len(v) >= 3 and v[-2] == ".":
+def vec2list(v) -> Optional[Cons]:
+    if py.isinstance(v, (py.list, py.tuple)):
+        if py.len(v) >= 3 and v[-2] == ".":
             l = vec2list(v[0:-2])
-            xdr(l, vec2list(v[-1]))
+            xdr(lastcdr(l), vec2list(v[-1]))
             return l
         return list(*[vec2list(x) for x in v])
     return quote(v)
+
+def lastcdr(l):
+    tail = l
+    while consp(l):
+        tail, l = l, cdr(l)
+    return tail
 
 # from lul.common import reader
 # belforms = reader.read_all(reader.stream(open("bel.bel").read()))
 # [print(repr(x.car)) for x in vec2list(belforms)]
 
 def readbel(string, more=None):
-    return vec2list(reader.read_from_string(string, mode="bel", more=more)[0])
+    form, pos = reader.read_from_string(string, mode="bel", more=more)
+    if more and form is more:
+        return more
+    return vec2list(form)
+
+def readallbel(string, more=None):
+    s = reader.stream(string, more=more, mode="bel")
+    body = reader.read_all(s)
+    if body is more:
+        return more
+    return cons(quote("do"), vec2list(body))
 
 # >>> bel( readbel("(join join join)"))
 # (<function join at 0x105a02a60> . <function join at 0x105a02a60>)
@@ -1651,6 +1997,9 @@ class BelCommandCompiler(codeop.CommandCompiler):
         form, pos = reader.read_from_string(source, more=(more := object()), mode="bel")
         if form is more:
             return None
+        with open(os.path.expanduser("~/.bel_history"), mode="a") as f:
+            print("", file=f)
+            print(source, file=f)
         return form
 
 class BelConsole(code.InteractiveConsole):
@@ -1666,7 +2015,7 @@ class BelConsole(code.InteractiveConsole):
             locals = self.locals
         # print(json.dumps(form))
         self.thatexpr = vec2list(form)
-        self.that = bel(self.thatexpr)
+        self.that = bel(self.thatexpr, locals)
         if self.that is not None:
             print(prrepr(self.that))
 
@@ -1682,13 +2031,13 @@ class BelConsole(code.InteractiveConsole):
         caller should be prepared to deal with it.
 
         """
-        # reload(M)
+        reload(M)
         # noinspection PyBroadException
         try:
             self.exec(code, self.locals)
         except SystemExit:
             raise
-        except:
+        except Exception:
             self.showtraceback()
 
 
@@ -1731,3 +2080,18 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
     with letattr(sys, 'ps1', '> '):
         with letattr(sys, 'ps2', '  '):
             console.interact(banner, exitmsg)
+
+def dbg():
+    import pdb
+    pdb.pm()
+
+
+
+def run(source, globals=unset, locals=unset):
+    form = readallbel(source)
+    return bel(form, globals, locals)
+
+def load(filename, globals=unset, locals=unset):
+    with open(filename) as f:
+        source = f.read()
+    return run(source, globals, locals)
