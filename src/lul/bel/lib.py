@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import collections
 
 from .runtime import *
 import json
@@ -209,6 +210,7 @@ def and_(*args):
     if no(args):
         return t
     else:
+        x = nil
         for x in args:
             if no(x):
                 return nil
@@ -218,6 +220,7 @@ def and_f(*args):
     if no(args):
         return t
     else:
+        x = nil
         for f in args:
             x = f()
             if no(x):
@@ -560,6 +563,8 @@ def literal(e):
         return t
     elif number(e):
         return t
+    elif consp(e):
+        return nil
     elif callable(e):
         return t
     elif string_literal_p(e):
@@ -598,21 +603,27 @@ def isa(name):
 #   (ev (list (list e nil))
 #       nil
 #       (list nil g)))
-def bel(e, g=unset, a=unset):
-    if a is unset:
-        # a = nil
-        # a = XCONS(G.__dict__)
-        a = G.__dict__
-    if g is unset:
-        # g = globe()
-        # g = nil
-        # g = {**py.__dict__, **globals()}
-        # g = XCONS(globals())
-        # g = append(XCONS(G.__dict__), XCONS(globals()))
-        g = globals()
-    return ev(list(list(e, a)),
-              nil,
-              list(nil, g))
+def bel(e, g=None, a=None):
+    reset = mev_tail.set(False)
+    try:
+        if g is None:
+            # g = nil
+            # g = XCONS(G.__dict__)
+            # g = collections.ChainMap(G.__dict__, py.__dict__)
+            g = collections.ChainMap(G.__dict__, globals(), py.__dict__)
+        if a is None:
+            # a = globe()
+            # a = nil
+            # a = {**py.__dict__, **globals()}
+            # a = XCONS(globals())
+            # a = append(XCONS(G.__dict__), XCONS(globals()))
+            # a = globals()
+            a = nil
+        return ev(list(list(e, a)),
+                  nil,
+                  list(nil, g))
+    finally:
+        mev_tail.reset(reset)
 
 # (def mev (s r (p g))
 #   (if (no s)
@@ -679,7 +690,7 @@ def ev(ea_s, r, m):
     elif yes(variable(e)):
         return vref(e, a, s, r, m)
     elif no(proper(e)):
-        return sigerr(quote("malformed"), s, r, m)
+        return sigerr(quote("malformed"), a, s, r, m)
     elif yes(it := get(car(e), forms, id)):
         return cdr(it)(cdr(e), a, s, r, m)
     else:
@@ -704,27 +715,20 @@ def vref(v, a, s, r, m):
     if inwhere(s):
         if yes(it := or_f(lambda: lookup(v, a, s, g),
                           lambda: and_f(lambda: car(inwhere(s)),
-                                        lambda: gset(v, nil, g)))):
-            # lambda: [cell := cons(v, nil),
-            #          xdr(g, cons(cell, cdr(g))),
-            #          cell][-1]))):
-            #     lambda cell: ([xdr(g, cons(cell, cdr(g)))] and cell))
-            # # (lambda cell: (lambda a, b: b)(xdr(g, cons(cell, cdr(g))), cell))(
-            # #     cons(v, nil))
-            # ))):
+                                        lambda: xput(v, nil, g)))):
             return mev(cdr(s), cons(list(it, quote("d")), r), m)
         else:
             if yes(it := lookup(v, a, s, g)):
                 return mev(s, cons(cdr(it), r), m)
             else:
-                return sigerr(list(quote("unboundb"), v), s, r, m)
+                return sigerr(list(quote("unboundb"), v), a, s, r, m)
     else:
         if yes(it := lookup(v, a, s, g)):
             return mev(s, cons(cdr(it), r), m)
         else:
-            return sigerr(list(quote("unboundb"), v), s, r, m)
+            return sigerr(list(quote("unboundb"), v), a, s, r, m)
 
-def gset(k, v, kvs):
+def xput(k, v, kvs):
     assert not null(kvs)
     if consp(kvs):
         cell = cons(k, v)
@@ -732,7 +736,6 @@ def gset(k, v, kvs):
     else:
         cell = Cell(kvs, k, nil)
         xdr(cell, v)
-    #return list(cell, quote("d"))
     return cell
 
 # (set smark (join))
@@ -773,19 +776,25 @@ def binding(v, s):
                                map(car, s))),
                id)
 
+class Signal(Error):
+    def __init__(self, msg, a, s, r, m):
+        super().__init__(msg, a, s, r, m)
+
 # (def sigerr (msg s r m)
 #   (aif (binding 'err s)
 #        (applyf (cdr it) (list msg) nil s r m)
 #        (err 'no-err)))
-def sigerr(msg, s, r, m):
-    # print("sigerr", msg)
+def sigerr(msg, a, s, r, m):
+    # if yes(it := lookup(quote("err"), a, s, g := cadr(m))):
     if yes(it := binding(quote("err"), s)):
-        return applyf(cdr(it), list(msg), nil, s, r, m)
+        return applyf(cdr(it), list(msg), a, s, r, m)
+    elif isinstance(msg, Exception):
+        raise msg
+    elif symbol(msg):
+        raise Signal(msg, a, s, r, m)
     else:
-        if isinstance(msg, Exception):
-            raise msg
-        else:
-            return err(quote("no-err"))
+        print(quote("no-err"), msg)
+        return mev(nil, cons(nil, r), m)
 
 # (mac fu args
 #   `(list (list smark 'fut (fn ,@args)) nil))
@@ -808,13 +817,13 @@ def evmark(e, a, s, r, m):
         car(e),
         quote("fut"), (lambda: cadr(e)(s, r, m)),
         quote("bind"), (lambda: mev(s, r, m)),
-        quote("loc"), (lambda: sigerr(quote("unfindable"), s, r, m)),
+        quote("loc"), (lambda: sigerr(quote("unfindable"), a, s, r, m)),
         quote("prot"), (lambda: mev(cons(list(cadr(e), a),
                                          fu(lambda s, r, m: mev(s, cdr(r), m)),
                                          s),
                                     r,
                                     m)),
-        lambda: sigerr(quote("unknown-mark"), s, r, m))
+        lambda: sigerr(quote("unknown-mark"), a, s, r, m))
 
 # (set forms (list (cons smark evmark)))
 forms = list(cons(smark, evmark))
@@ -917,8 +926,8 @@ def where(es, a, s, r, m):
 #            m)
 #       (sigerr 'cannot-bind s r m)))
 @form_("dyn")
-def dyn(es, a, s, r, m):
-    v, e1, e2 = car(es), cadr(es), caddr(es)
+def dyn(v_e1_e2, a, s, r, m):
+    v, e1, e2 = car(v_e1_e2), cadr(v_e1_e2), caddr(v_e1_e2)
     if yes(variable(v)):
         return mev(cons(list(e1, a),
                         fu(lambda s, r, m: dyn2(v, e2, a, s, r, m)),
@@ -926,7 +935,7 @@ def dyn(es, a, s, r, m):
                    r,
                    m)
     else:
-        return sigerr(quote("cannot-bind"), s, r, m)
+        return sigerr(quote("cannot-bind"), a, s, r, m)
 
 # (def dyn2 (v e2 a s r m)
 #   (mev (cons (list e2 a)
@@ -1066,14 +1075,14 @@ def applyf(f, args, a, s, r, m):
         if proper(f):
             return applylit(f, args, a, s, r, m)
         else:
-            return sigerr(quote("bad-lit"), s, r, m)
+            return sigerr(quote("bad-lit"), a, s, r, m)
     elif callable(f):
         try:
             return mev(s, cons(apply(f, args), r), m)
         except Exception as v:
-            return sigerr(v, s, r, m)
+            return sigerr(v, a, s, r, m)
     else:
-        return sigerr(quote("cannot-apply"), s, r, m)
+        return sigerr(quote("cannot-apply"), a, s, r, m)
 
 # (def applylit (f args a s r m)
 #   (aif (and (inwhere s) (find [(car _) f] locfns))
@@ -1105,22 +1114,22 @@ def applylit(f, args, a, s, r, m):
             if yes(okenv(env)) and yes(okparms(parms)):
                 return applyclo(parms, args, env, body, s, r, m)
             else:
-                return sigerr(quote("bad-clo"), s, r, m)
+                return sigerr(quote("bad-clo"), a, s, r, m)
         def do_cont():
             s2, r2, extra = car(rest), cadr(rest), cddr(rest)
             if yes(okstack(s2)) and yes(proper(r2)):
-                return applycont(s2, r2, args, s, r, m)
+                return applycont(s2, r2, args, a, s, r, m)
             else:
-                return sigerr(quote("bad-cont"), s, r, m)
+                return sigerr(quote("bad-cont"), a, s, r, m)
         def do_virfns():
             if yes(it := get(tag, virfns)):
                 e = cdr(it)(f, map(lambda _: list(quote("quote"), _), args))
                 return mev(cons(list(e, a), s), r, m)
             else:
-                return sigerr(quote("unapplyable"), s, r, m)
+                return sigerr(quote("unapplyable"), a, s, r, m)
         return case_f(
             tag,
-            quote("prim"), (lambda: applyprim(car(rest), args, s, r, m)),
+            quote("prim"), (lambda: applyprim(car(rest), args, a, s, r, m)),
             quote("clo"), do_clo,
             quote("mac"), (lambda: applym(f, map(lambda _: list(quote("quote"), _), args), a, s, r, m)),
             quote("cont"), do_cont,
@@ -1238,38 +1247,38 @@ prims = list(list(quote("id"), quote("join"), quote("xar"), quote("xdr"), quote(
 #                     (sigerr v s r m)
 #                     (mev s (cons v r) m))))
 #        (sigerr 'unknown-prim s r m)))
-def applyprim(f, args, s, r, m):
+def applyprim(f, args, a, s, r, m):
     if yes(it := some(lambda _: mem(f, _), prims)):
         if yes(udrop(cdr(it), args)):
-            return sigerr(quote("overargs"), s, r, m)
+            return sigerr(quote("overargs"), a, s, r, m)
         else:
-            a = car(args)
-            b = cadr(args)
+            x = car(args)
+            y = cadr(args)
             try:
                 v = case_f(f,
-                           quote("id"), lambda: id(a, b),
-                           quote("join"), lambda: join(a, b),
-                           quote("car"), lambda: car(a),
-                           quote("cdr"), lambda: cdr(a),
-                           quote("type"), lambda: type(a),
-                           quote("xar"), lambda: xar(a, b),
-                           quote("xdr"), lambda: xdr(a, b),
-                           quote("sym"), lambda: sym(a),
-                           quote("nom"), lambda: nom(a),
-                           quote("wrb"), lambda: wrb(a, b),
-                           quote("rdb"), lambda: rdb(a),
-                           quote("ops"), lambda: ops(a, b),
-                           quote("cls"), lambda: cls(a),
-                           quote("stat"), lambda: stat(a),
+                           quote("id"), lambda: id(x, y),
+                           quote("join"), lambda: join(x, y),
+                           quote("car"), lambda: car(x),
+                           quote("cdr"), lambda: cdr(x),
+                           quote("type"), lambda: type(x),
+                           quote("xar"), lambda: xar(x, y),
+                           quote("xdr"), lambda: xdr(x, y),
+                           quote("sym"), lambda: sym(x),
+                           quote("nom"), lambda: nom(x),
+                           quote("wrb"), lambda: wrb(x, y),
+                           quote("rdb"), lambda: rdb(x),
+                           quote("ops"), lambda: ops(x, y),
+                           quote("cls"), lambda: cls(x),
+                           quote("stat"), lambda: stat(x),
                            quote("coin"), lambda: coin(),
-                           quote("sys"), lambda: sys(a),
-                           quote("print"), lambda: print(a),
-                           lambda: sigerr(quote("bad-prim"), s, r, m))
+                           quote("sys"), lambda: sys(x),
+                           quote("print"), lambda: print(x),
+                           lambda: sigerr(quote("bad-prim"), a, s, r, m))
             except Exception as v:
-                return sigerr(v, s, r, m)
+                return sigerr(v, a, s, r, m)
             return mev(s, cons(v, r), m)
     else:
-        return sigerr(quote("unknown-prim"), s, r, m)
+        return sigerr(quote("unknown-prim"), a, s, r, m)
 
 # (def applyclo (parms args env body s r m)
 #   (mev (cons (fu (s r m)
@@ -1305,11 +1314,11 @@ def pass_(pat, arg, env, s, r, m):
         return mev(s, cons(_, r), m)
     if no(pat):
         if yes(arg):
-            return sigerr(quote("overargs"), s, r, m)
+            return sigerr(quote("overargs"), env, s, r, m)
         else:
             return ret(env)
     elif yes(literal(pat)):
-        return sigerr(quote("literal-parm"), s, r, m)
+        return sigerr(quote("literal-parm"), env, s, r, m)
     elif yes(variable(pat)):
         return ret(cons(cons(pat, arg), env))
     elif yes(caris(pat, t)):
@@ -1334,7 +1343,7 @@ def typecheck(var_f, arg, env, s, r, m):
                     fu((lambda s, r, m:
                         pass_(var, arg, env, s, cdr(r), m)
                         if yes(car(r)) else
-                        sigerr(quote("mistype"), s, r, m))),
+                        sigerr(quote("mistype"), env, s, r, m))),
                     s),
                r,
                m)
@@ -1369,9 +1378,9 @@ def destructure(p_ps, arg, env, s, r, m):
                        r,
                        m)
         else:
-            return sigerr(quote("underargs"), s, r, m)
+            return sigerr(quote("underargs"), env, s, r, m)
     elif yes(atom(arg)):
-        return sigerr(quote("atom-arg"), s, r, m)
+        return sigerr(quote("atom-arg"), env, s, r, m)
     else:
         return mev(cons(fu(lambda s, r, m: pass_(p, car(arg), env, s, r, m)),
                         fu(lambda s, r, m: pass_(ps, cdr(arg), car(r), s, cdr(r), m)),
@@ -1387,9 +1396,9 @@ def destructure(p_ps, arg, env, s, r, m):
 #                    s2)
 #            (cons (car args) r2)
 #            m)))
-def applycont(s2, r2, args, s, r, m):
+def applycont(s2, r2, args, a, s, r, m):
     if no(args) or yes(cdr(args)):
-        return sigerr(quote("wrong-no-args"), s, r, m)
+        return sigerr(quote("wrong-no-args"), a, s, r, m)
     else:
         return mev(append(keep(lambda _: and_f(lambda: protected(_),
                                                lambda: no(mem(_, s2, id))),
@@ -1534,6 +1543,25 @@ globals()["-"] = operator.sub
 globals()["*"] = operator.mul
 globals()["/"] = operator.truediv
 globals()["//"] = operator.floordiv
+globals()["<"] = operator.lt
+globals()["<="] = operator.le
+globals()["="] = equal
+globals()[">="] = operator.ge
+globals()[">"] = operator.gt
+globals()["not"] = operator.not_
+globals()["true"] = True
+globals()["false"] = False
+# globals()["__import__"] = __import__
+
+# Cons.__call__ = lambda self, *args, **kws: bel(cons(self, XCONS(args)))
+
+def bel_Cons___call__(self, *args, **kws):
+    assert not kws
+    breakpoint()
+    return bel(cons(self, XCONS(args)))
+
+Cons.__call__ = bel_Cons___call__
+
 eval = eval
 exec = exec
 compile = compile
@@ -1603,13 +1631,17 @@ class BelCommandCompiler(codeop.CommandCompiler):
         return form
 
 class BelConsole(code.InteractiveConsole):
-    def __init__(self, locals=None, filename="<console>"):
+    def __init__(self, globals=None, locals=None, filename="<console>"):
         super().__init__(locals=locals, filename=filename)
+        self.locals = locals
+        self.globals = globals
         self.compile = BelCommandCompiler()
 
     def runcode(self, form) -> None:
         # print(json.dumps(form))
-        print(repr(result := bel(expr := vec2list(form))))
+        result = bel(expr := vec2list(form), self.globals, self.locals)
+        if result is not None:
+            print(repr(result))
 
 
 @contextlib.contextmanager
@@ -1621,7 +1653,7 @@ def letattr(obj, key, val, *default):
     finally:
         setattr(obj, key, prev)
 
-def interact(banner=None, readfunc=None, local=None, exitmsg=None):
+def interact(banner=None, readfunc=None, globals=None, locals=None, exitmsg=None):
     """Closely emulate the interactive Python interpreter.
 
     This is a backwards compatible interface to the InteractiveConsole
@@ -1632,11 +1664,12 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None):
 
     banner -- passed to InteractiveConsole.interact()
     readfunc -- if not None, replaces InteractiveConsole.raw_input()
-    local -- passed to InteractiveInterpreter.__init__()
+    globals -- passed to BelConsole.__init__()
+    locals -- passed to InteractiveInterpreter.__init__()
     exitmsg -- passed to InteractiveConsole.interact()
 
     """
-    console = BelConsole(local)
+    console = BelConsole(globals=globals, locals=locals)
     if readfunc is not None:
         console.raw_input = readfunc
     else:

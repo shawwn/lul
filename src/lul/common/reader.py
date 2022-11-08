@@ -86,8 +86,6 @@ def read_char(s):
     if (c := peek_char(s)) is not None:
         stream_pos(s, stream_pos(s) + 1)
         return c
-    else:
-        raise EndOfFile()
 
 def read_line(s):
     r = []

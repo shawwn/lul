@@ -23,7 +23,6 @@ class NSMeta(type):
             setattr(self, id, value)
             return value
 
-
 def id(x=nil, y=nil):
     if eq(x, y):
         return t
@@ -80,19 +79,26 @@ def nom(x):
 def quote(x):
     return sym(x)
 
-def apply(f, *args):
-    xs = args[-1]
+def apply(f, *args, **kws):
+    args = [arg for arg in args]
+    xs = args.pop() if args else nil
+    if dictp(xs):
+        kws.update(xs)
+        xs = args.pop() if args else nil
     if isinstance(xs, Cons):
         xs = xs.list()
     elif xs is nil:
         xs  = ()
-    args = tuple(args[0:-1]) + tuple(xs)
-    return f(*args)
+    args = tuple(args) + tuple(xs)
+    return f(*args, **kws)
 
 # globe = globals
 
 unset = join("unset")
 o = "o"
 
-def err(x):
-    raise Error(x)
+# def err(x):
+#     raise Error(x)
+
+# def err(x):
+#     print(x)

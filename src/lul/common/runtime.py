@@ -844,6 +844,11 @@ def dictp(x):
     return isinstance(x, std.Mapping)
 
 @dispatch()
+def vectorp(x):
+    # return isinstance(x, std.Sequence) and not isinstance(x, (py.str, py.bytes))
+    return isinstance(x, py.list)
+
+@dispatch()
 def car(x):
     return x if null(x) else x.car
 
